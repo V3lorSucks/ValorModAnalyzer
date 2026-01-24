@@ -1,5 +1,5 @@
 # Valor Combined Mod Analyzer - PowerShell Script
-# Author: DrValor
+# Authors: DrValor, Hadron, TonyNoh, YarpLetapStan
 # Scans Minecraft mods for suspicious patterns and verifies against known databases
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -10,7 +10,7 @@ Write-Host "Valor Mod Analyzer v2.0" -ForegroundColor Cyan
 Write-Host "Security Assessment Tool" -ForegroundColor Cyan
 Write-Host "===========================================" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "Author: DrValor" -ForegroundColor Gray
+Write-Host "Authors: DrValor, Hadron, TonyNoh, YarpLetapStan" -ForegroundColor Gray
 Write-Host ""
 
 # Get mods folder path
@@ -852,7 +852,7 @@ Write-Host "   " + ("=" * 50) -ForegroundColor Blue
 Write-Host ""
 Write-Host "   Security scan completed." -ForegroundColor Cyan
 Write-Host ""
-Write-Host "   Tool developed by: DrValor" -ForegroundColor Gray
+Write-Host "   Tool developed by: DrValor, Hadron, TonyNoh, YarpLetapStan" -ForegroundColor Gray
 Write-Host ""
 Write-Host "   " + ("=" * 50) -ForegroundColor Blue
 Write-Host ""
