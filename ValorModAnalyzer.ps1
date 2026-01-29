@@ -1,5 +1,6 @@
 # Valor Combined Mod Analyzer - PowerShell Script
-# Authors: DrValor, Hadron, TonyNoh, YarpLetapStan
+# Developed by: DrValor
+# Based on work by: Hadron, TonyNoh, YarpLetapStan
 # Scans Minecraft mods for suspicious patterns and verifies against known databases
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -10,7 +11,8 @@ Write-Host "Valor Mod Analyzer v2.0" -ForegroundColor Cyan
 Write-Host "Security Assessment Tool" -ForegroundColor Cyan
 Write-Host "===========================================" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "Authors: DrValor, Hadron, TonyNoh, YarpLetapStan" -ForegroundColor Gray
+Write-Host "Developed by: DrValor" -ForegroundColor Gray
+Write-Host "Based on work by: Hadron, TonyNoh, YarpLetapStan" -ForegroundColor DarkGray
 Write-Host ""
 
 # Get mods folder path
@@ -539,7 +541,7 @@ Write-Host
 # Process all mods
 for ($i = 0; $i -lt $jarFiles.Count; $i++) {
     $file = $jarFiles[$i]
-    Write-Host "   [ANALYZING] Module Scan: $($i+1) / $totalMods - $($file.Name)" -ForegroundColor Yellow -NoNewline
+    Write-Host "`r   [ANALYZING] Module Scan: $($i+1) / $totalMods - $($file.Name)" -ForegroundColor Yellow -NoNewline
     
     # Get file info
     $hash = Get-SHA1 -filePath $file.FullName
@@ -607,7 +609,7 @@ for ($i = 0; $i -lt $jarFiles.Count; $i++) {
     }
 }
 
-Write-Host "`r$(' ' * 100)`r" -NoNewline
+Write-Host "`r$( * 120)`r" -NoNewline
 
 # Try to identify unknown mods
 for ($i = 0; $i -lt $unknownMods.Count; $i++) {
@@ -651,7 +653,7 @@ if ($unknownMods.Count -gt 0) {
         
         foreach ($mod in $unknownMods) {
             $idx++
-            Write-Host "   [DEEP_SCAN] Pattern Recognition: $idx/$($unknownMods.Count) - $($mod.FileName)" -ForegroundColor Yellow -NoNewline
+            Write-Host "`r   [DEEP_SCAN] Pattern Recognition: $idx/$($unknownMods.Count) - $($mod.FileName)" -ForegroundColor Yellow -NoNewline
             
             $detected = [System.Collections.Generic.HashSet[string]]::new()
             
@@ -700,7 +702,7 @@ if ($unknownMods.Count -gt 0) {
         Write-Host "`r   [ERROR] During deep analysis: $($_.Exception.Message)" -ForegroundColor Red
     }
     
-    Write-Host "`r$(' ' * 100)`r" -NoNewline
+    Write-Host "`r$( * 120)`r" -NoNewline
 }
 
 # Also scan verified mods for suspicious patterns
@@ -708,7 +710,7 @@ Write-Host "   [PATTERN_SCAN] Inspecting verified modules for malicious signatur
 $counter = 0
 foreach ($mod in $allModsInfo) {
     $counter++
-    Write-Host "   [PATTERN_SCAN] Signature Verification: $counter / $($allModsInfo.Count) - $($mod.FileName)" -ForegroundColor Yellow -NoNewline
+    Write-Host "`r   [PATTERN_SCAN] Signature Verification: $counter / $($allModsInfo.Count) - $($mod.FileName)" -ForegroundColor Yellow -NoNewline
     
     if ($modStrings = Check-Strings $mod.FilePath) {
         $suspiciousMods += [PSCustomObject]@{ 
@@ -719,7 +721,7 @@ foreach ($mod in $allModsInfo) {
     }
 }
 
-Write-Host "`r$(' ' * 100)`r" -NoNewline
+Write-Host "`r$( * 120)`r" -NoNewline
 
 # Results output
 Write-Host "`n" + ("=" * 50) -ForegroundColor Cyan
@@ -852,7 +854,8 @@ Write-Host "   " + ("=" * 50) -ForegroundColor Blue
 Write-Host ""
 Write-Host "   Security scan completed." -ForegroundColor Cyan
 Write-Host ""
-Write-Host "   Tool developed by: DrValor, Hadron, TonyNoh, YarpLetapStan" -ForegroundColor Gray
+Write-Host "   Developed by: DrValor" -ForegroundColor Gray
+Write-Host "   Based on work by: Hadron, TonyNoh, YarpLetapStan" -ForegroundColor DarkGray
 Write-Host ""
 Write-Host "   " + ("=" * 50) -ForegroundColor Blue
 Write-Host ""
