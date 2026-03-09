@@ -61,6 +61,7 @@ Write-Host ""
 
 # Find all javaw.exe processes
 $javaProcesses = Get-Process -Name javaw -ErrorAction SilentlyContinue
+$minecraftProcessesInfo = @()
 
 if ($javaProcesses.Count -eq 0) {
     Write-Host "No javaw.exe processes found." -ForegroundColor Yellow
@@ -75,6 +76,16 @@ if ($javaProcesses.Count -eq 0) {
     foreach ($proc in $javaProcesses) {
         # Get full command line
         $commandLine = (Get-CimInstance Win32_Process -Filter "ProcessId = $($proc.Id)").CommandLine
+        
+        # Store process info for HTML report
+        $processInfo = [PSCustomObject]@{
+            ProcessId = $proc.Id
+            ProcessName = $proc.Name
+            StartTime = $proc.StartTime
+            CommandLine = $commandLine
+            HasFabricAddMods = $commandLine -match '-Dfabric\.addMods'
+        }
+        $minecraftProcessesInfo += $processInfo
         
         if ($commandLine -match '-Dfabric\.addMods') {
             $foundFabricAddMods = $true
@@ -935,6 +946,79 @@ if ($fabricAddModsDetected) {
 }
 
 $htmlReport += "</div>"
+
+# Minecraft Process JVM Arguments Section
+if ($minecraftProcessesInfo.Count -gt 0) {
+    $htmlReport += "<div class='section'>
+        <h2>[PROCESS INFO] Minecraft JVM Arguments ($($minecraftProcessesInfo.Count))</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Process</th>
+                    <th>PID</th>
+                    <th>Start Time</th>
+                    <th>User-Specified JVM Arguments</th>
+                </tr>
+            </thead>
+            <tbody>"
+    
+    foreach ($procInfo in $minecraftProcessesInfo) {
+        $startTimeFormatted = Get-Date $procInfo.StartTime -Format 'yyyy-MM-dd HH:mm:ss'
+        $fabricBadge = if ($procInfo.HasFabricAddMods) { 
+            "<span class='badge badge-warning'>Fabric AddMods</span> " 
+        } else { 
+            "" 
+        }
+        
+        # Extract only user-specified arguments (filter out standard launcher args)
+        $userArgs = @()
+       if ($procInfo.CommandLine) {
+            # Split command line into parts
+            $parts = $procInfo.CommandLine -split '\s+'
+            
+            # Filter for user-relevant arguments
+            foreach ($part in $parts) {
+                # Only include @argfile paths - these are truly user-modifiable
+                 if ($part -match '^@') {
+                    # Include @argfile references (these are user-modifiable)
+                    $userArgs += $part
+                }
+             elseif ($part -match '^-D(?!java\.|jna\.|org\.lwjgl|io\.netty|minecraft\.launcher|log4j|sun\.|file\.|user\.|os\.|FabricMcEmu|modrinth\.internal\.)') {
+                    # Include custom system properties but exclude standard Java/Minecraft/Launcher ones
+                    $userArgs += $part
+                }
+             elseif ($part -match '^-X' -or $part -match '^-XX:') {
+                    # Include memory and JVM flags (these are typically user-configured)
+                    $userArgs += $part
+                }
+            elseif ($part -match '^-D(?!java\.|jna\.|org\.lwjgl|io\.netty|minecraft\.launcher|log4j|sun\.|file\.|user\.|os\.|FabricMcEmu|modrinth\.internal\.)') {
+                    # Include custom system properties but exclude standard Java/Minecraft/Launcher ones
+                    $userArgs += $part
+                }
+         elseif ($part -match '^-X' -or $part -match '^-XX:') {
+                    # Include memory and JVM flags (these are typically user-configured)
+                    $userArgs += $part
+                }
+           }
+        }
+        
+        $argsDisplay = if ($userArgs.Count-gt 0) {
+            $escapedArgs = ($userArgs | ForEach-Object { $_ -replace '&', '&amp;' -replace '<', '&lt;' -replace '>', '&gt;' }) -join ' '
+            $escapedArgs
+        } else {
+            "<em style='color: var(--success);'>No custom arguments</em>"
+        }
+        
+       $htmlReport += "<tr>
+            <td>${fabricBadge}$($procInfo.ProcessName)</td>
+            <td>$($procInfo.ProcessId)</td>
+            <td>$startTimeFormatted</td>
+            <td style='font-family: monospace; font-size: 0.75rem; word-break: break-all;'>$argsDisplay</td>
+        </tr>"
+    }
+    
+   $htmlReport += "</tbody></table></div>"
+}
 
 # Verified Mods Section
 if ($verifiedMods.Count -gt 0) {
