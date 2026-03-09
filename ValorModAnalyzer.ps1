@@ -723,6 +723,420 @@ foreach ($mod in $allModsInfo) {
 
 Write-Host "`r$( * 120)`r" -NoNewline
 
+# Generate HTML Report
+Write-Host ""
+Write-Host "[REPORT] Generating HTML Report..." -ForegroundColor Yellow
+
+$OutputPath = "$env:USERPROFILE\Desktop\ValorModAnalysisReport.html"
+
+if (-not (Test-Path (Split-Path $OutputPath))) {
+    New-Item -ItemType Directory -Path (Split-Path $OutputPath) -Force | Out-Null
+}
+
+$htmlReport = @"
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Valor Mod Analyzer - Security Report</title>
+    <style>
+        :root {
+            --primary: #2c3e50;
+            --success: #27ae60;
+            --warning: #f39c12;
+            --danger: #e74c3c;
+            --info: #3498db;
+            --magenta: #9b59b6;
+            --light: #ecf0f1;
+        }
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+           font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, var(--primary) 0%, #1a2530 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        .header h1 { font-size: 2rem; margin-bottom: 10px; }
+        .header p { opacity: 0.9; }
+        
+        .summary-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            text-align: center;
+            transition: transform 0.3s;
+        }
+        
+        .card:hover { transform: translateY(-5px); }
+        
+        .card h3 { font-size: 0.9rem; color: var(--primary); margin-bottom: 10px; }
+        .card p { font-size: 2rem; font-weight: bold; }
+        
+        .card.success { border-bottom: 4px solid var(--success); }
+        .card.success p { color: var(--success); }
+        
+        .card.warning { border-bottom: 4px solid var(--warning); }
+        .card.warning p { color: var(--warning); }
+        
+        .card.danger { border-bottom: 4px solid var(--danger); }
+        .card.danger p { color: var(--danger); }
+        
+        .card.info { border-bottom: 4px solid var(--info); }
+        .card.info p { color: var(--info); }
+        
+        .card.magenta { border-bottom: 4px solid var(--magenta); }
+        .card.magenta p { color: var(--magenta); }
+        
+        .section {
+            background: white;
+            border-radius: 8px;
+            padding: 25px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        .section h2 {
+            color: var(--primary);
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid var(--info);
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        
+        th {
+            background: linear-gradient(135deg, var(--primary) 0%, #1a2530 100%);
+            color: white;
+            padding: 12px;
+            text-align: left;
+        }
+        
+        td {
+            padding: 12px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        tr:nth-child(even) { background-color: #f8f9fa; }
+        tr:hover { background-color: #e3f2fd; }
+        
+        .verified-row { border-left: 4px solid var(--success); }
+        .suspicious-row { border-left: 4px solid var(--danger); background: linear-gradient(135deg, #fff3cd 0%, #fff8e1 100%) !important; }
+        .tampered-row { border-left: 4px solid var(--magenta); background: linear-gradient(135deg, #fadbd8 0%, #f5b7b1 100%) !important; }
+        .unknown-row { border-left: 4px solid var(--warning); }
+        
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+           font-size: 0.8rem;
+           font-weight: bold;
+            margin-right: 5px;
+        }
+        
+        .badge-success { background: var(--success); color: white; }
+        .badge-warning { background: var(--warning); color: white; }
+        .badge-danger { background: var(--danger); color: white; }
+        .badge-info { background: var(--info); color: white; }
+        .badge-magenta { background: var(--magenta); color: white; }
+        
+        .footer {
+            text-align: center;
+            margin-top: 40px;
+            padding: 20px;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>[REPORT] Valor Mod Analyzer Results</h1>
+            <p>Security Assessment Results</p>
+            <p>Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')</p>
+        </header>
+"@
+
+# Summary Cards
+$htmlReport += "<div class='summary-cards'>
+    <div class='card info'>
+        <h3>Total Analyzed</h3>
+        <p>$totalMods</p>
+    </div>
+    <div class='card success'>
+        <h3>Verified</h3>
+        <p>$($verifiedMods.Count)</p>
+    </div>
+    <div class='card warning'>
+        <h3>Unknown</h3>
+        <p>$($unknownMods.Count)</p>
+    </div>
+    <div class='card danger'>
+        <h3>Suspicious</h3>
+        <p>$($suspiciousMods.Count)</p>
+    </div>
+    <div class='card magenta'>
+        <h3>Tampered</h3>
+        <p>$($tamperedMods.Count)</p>
+    </div>
+</div>"
+
+# Fabric AddMods Section
+$htmlReport += "<div class='section'>
+    <h2>[FABRIC] External Mods Check</h2>"
+
+$fabricAddModsDetected = $javaProcesses | Where-Object { 
+    try { 
+        (Get-CimInstance Win32_Process -Filter "ProcessId = $($_.Id)" -ErrorAction Stop).CommandLine -match '-Dfabric\.addMods'
+    } catch { $false }
+}
+
+if ($fabricAddModsDetected) {
+    $htmlReport += "<p style='color: var(--warning); font-weight: bold;'>[WARNING] External Fabric mod loading detected</p>"
+   foreach ($proc in $fabricAddModsDetected) {
+        $cmdLine = (Get-CimInstance Win32_Process -Filter "ProcessId = $($proc.Id)").CommandLine
+       if ($cmdLine -match '-Dfabric\.addMods=([\^\s]+)') {
+            $htmlReport += "<p><strong>Process ID:</strong> $($proc.Id)</p>"
+            $htmlReport += "<p style='font-family: monospace; background: #f8f9fa; padding: 10px; border-radius: 4px;'>-Dfabric.addMods=$($matches[1])</p>"
+        }
+    }
+} else {
+    $htmlReport += "<p style='color: var(--success);'>[OK] No unauthorized external mod loading detected</p>"
+}
+
+$htmlReport += "</div>"
+
+# Verified Mods Section
+if ($verifiedMods.Count -gt 0) {
+    $htmlReport += "<div class='section'>
+        <h2>[VERIFIED] Modules ($($verifiedMods.Count))</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Module Name</th>
+                    <th>File</th>
+                    <th>Version</th>
+                    <th>Loader</th>
+                    <th>Source</th>
+                    <th>Integrity</th>
+                </tr>
+            </thead>
+            <tbody>"
+    
+   foreach ($mod in $verifiedMods) {
+        $isSuspicious = $suspiciousMods.FileName -contains $mod.FileName
+        $isTampered = $tamperedMods.FileName -contains $mod.FileName
+        
+        $rowClass = if ($isTampered) { "tampered-row" } elseif ($isSuspicious) { "suspicious-row" } else { "verified-row" }
+        
+        $statusBadge = if ($isTampered) { 
+            "<span class='badge badge-magenta'>INTEGRITY FAIL</span>" 
+        } elseif ($isSuspicious) { 
+            "<span class='badge badge-warning'>SIGNATURE MATCH</span>" 
+        } else { 
+            "<span class='badge badge-success'>VERIFIED</span>" 
+        }
+        
+        $integrityStatus = if ($mod.ExpectedSize -gt 0) {
+           if ($mod.ActualSize -eq $mod.ExpectedSize) {
+                "<span style='color: var(--success);'>[VERIFIED] ($($mod.ActualSizeKB) KB)</span>"
+            } else {
+                $sign = if ($mod.SizeDiffKB -gt 0) { "+" } else { "" }
+                $color = if ($isTampered) { "var(--magenta)" } else { "var(--warning)" }
+                "<span style='color: $color;'>[MODIFIED] ($($mod.ActualSizeKB) KB, Change: $sign$($mod.SizeDiffKB) KB)</span>"
+            }
+        } else {
+            "<span style='color: var(--info);'>[?]</span>"
+        }
+        
+        $loaderColor = if ($mod.LoaderType -eq "Fabric") { "var(--magenta)" } else { "var(--warning)" }
+        
+        $htmlReport += "<tr class='$rowClass'>
+            <td>$statusBadge $($mod.ModName)</td>
+            <td style='font-family: monospace; font-size: 0.9rem;'>$($mod.FileName)</td>
+            <td>$($mod.Version)</td>
+            <td style='color: $loaderColor;'>$($mod.LoaderType)</td>
+            <td>$($mod.DownloadSource)</td>
+            <td>$integrityStatus</td>
+        </tr>"
+    }
+    
+    $htmlReport += "</tbody></table></div>"
+}
+
+# Unknown Mods Section
+if ($unknownMods.Count -gt 0) {
+    $htmlReport += "<div class='section'>
+        <h2>[UNKNOWN] Modules ($($unknownMods.Count))</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>File</th>
+                    <th>Source</th>
+                    <th>Size</th>
+                </tr>
+            </thead>
+            <tbody>"
+    
+   foreach ($mod in $unknownMods) {
+        $sourceText = if ($mod.DownloadSource) { $mod.DownloadSource } else { "Unknown" }
+        $htmlReport += "<tr class='unknown-row'>
+            <td style='font-family: monospace;'>$($mod.FileName)</td>
+            <td>$sourceText</td>
+            <td>$($mod.FileSizeKB) KB</td>
+        </tr>"
+    }
+    
+    $htmlReport += "</tbody></table></div>"
+}
+
+# Suspicious Mods Section
+if ($suspiciousMods.Count -gt 0) {
+    $htmlReport += "<div class='section'>
+        <h2>[ALERT] Suspicious Patterns ($($suspiciousMods.Count))</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>File</th>
+                    <th>Product</th>
+                    <th>Detected Patterns</th>
+                </tr>
+            </thead>
+            <tbody>"
+    
+   foreach ($mod in $suspiciousMods) {
+        $patternsList = ($mod.DetectedPatterns | Sort-Object) -join ", "
+        $productName = if ($mod.ModName) { $mod.ModName } else { "Unknown" }
+        
+        $htmlReport += "<tr class='suspicious-row'>
+            <td style='font-family: monospace;'>$($mod.FileName)</td>
+            <td>$productName</td>
+            <td style='color: var(--danger); font-weight: bold;'>$patternsList</td>
+        </tr>"
+    }
+    
+    $htmlReport += "</tbody></table></div>"
+}
+
+# Tampered Mods Section
+if ($tamperedMods.Count -gt 0) {
+    $htmlReport += "<div class='section'>
+        <h2>[INTEGRITY FAIL] Modified Files ($($tamperedMods.Count))</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>File</th>
+                    <th>Product</th>
+                    <th>Loader</th>
+                    <th>Size Change</th>
+                </tr>
+            </thead>
+            <tbody>"
+    
+   foreach ($mod in $tamperedMods) {
+        $sign = if ($mod.SizeDiffKB -gt 0) { "+" } else { "" }
+        $loaderColor = if ($mod.LoaderType -eq "Fabric") { "var(--magenta)" } else { "var(--warning)" }
+        
+        $htmlReport += "<tr class='tampered-row'>
+            <td style='font-family: monospace;'>$($mod.FileName)</td>
+            <td>$($mod.ModName)</td>
+            <td style='color: $loaderColor;'>$($mod.LoaderType)</td>
+            <td style='color: var(--magenta); font-weight: bold;'>Expected: $($mod.ExpectedSizeKB) KB -&gt; Current: $($mod.ActualSizeKB) KB ($sign$($mod.SizeDiffKB) KB)</td>
+        </tr>"
+    }
+    
+    $htmlReport += "</tbody></table></div>"
+}
+
+# Scan Summary
+$htmlReport += @"
+<div class='section'>
+    <h2>[SUMMARY] Scan Results</h2>
+    <table>
+        <tr>
+            <th>Metric</th>
+            <th>Count</th>
+        </tr>
+        <tr>
+            <td>Total Files Analyzed</td>
+            <td style='font-weight: bold; font-size: 1.2rem;'>$totalMods</td>
+        </tr>
+        <tr>
+            <td>Verified Modules</td>
+            <td style='color: var(--success); font-weight: bold;'>$($verifiedMods.Count)</td>
+        </tr>
+        <tr>
+            <td>Unverified Files</td>
+            <td style='color: var(--warning); font-weight: bold;'>$($unknownMods.Count)</td>
+        </tr>
+        <tr>
+            <td>Signature Matches</td>
+            <td style='color: var(--danger); font-weight: bold;'>$($suspiciousMods.Count)</td>
+        </tr>
+        <tr>
+            <td>Integrity Mismatches</td>
+            <td style='color: var(--magenta); font-weight: bold;'>$($tamperedMods.Count)</td>
+        </tr>
+    </table>
+</div>
+
+<footer class='footer'>
+    <p><strong>Valor Mod Analyzer v2.0</strong></p>
+    <p>Developed by: DrValor</p>
+    <p>Based on work by: Hadron, TonyNoh, YarpLetapStan</p>
+    <p>Report Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')</p>
+</footer>
+</div>
+</body>
+</html>
+"@
+
+try {
+    $htmlReport | Out-File -FilePath $OutputPath -Encoding UTF8 -Force
+    Write-Host "  Report saved successfully" -ForegroundColor Green
+} catch {
+    Write-Host "  Error saving report: $_" -ForegroundColor Red
+}
+
+Write-Host ""
+Write-Host "Opening report in browser..." -ForegroundColor Yellow
+
+try {
+    Start-Process $OutputPath
+} catch {
+    Write-Host "Could not open browser automatically. Please open the report manually." -ForegroundColor Yellow
+}
+
 # Results output
 Write-Host "`n" + ("=" * 50) -ForegroundColor Cyan
 Write-Host "=== Verification Results ===" -ForegroundColor Cyan
