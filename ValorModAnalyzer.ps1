@@ -979,7 +979,7 @@ if ($minecraftProcessesInfo.Count -gt 0) {
             # Filter for user-relevant arguments
             foreach ($part in $parts) {
                 # Only include @argfile paths - these are truly user-modifiable
-                 if ($part -match '^@') {
+                 if ($part -match '^@' -or $part -match '^-javaagent:') {
                     # Include @argfile references (these are user-modifiable)
                     $userArgs += $part
                 }
