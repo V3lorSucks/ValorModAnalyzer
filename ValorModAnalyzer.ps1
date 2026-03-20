@@ -75,7 +75,7 @@ if ($javaProcesses.Count -eq 0) {
 
     foreach ($proc in $javaProcesses) {
         # Get full command line
-        $commandLine = (Get-CimInstance Win32_Process -Filter "ProcessId = $($proc.Id)").CommandLine
+        $commandLine = (Get-CimInstance Win32_Process -Filter "ProcessId = $($proc.Id)")).CommandLine
         
         # Store process info for HTML report
         $processInfo = [PSCustomObject]@{
@@ -111,6 +111,120 @@ if ($javaProcesses.Count -eq 0) {
         Write-Host "   [STATUS] No unauthorized external mod loading detected" -ForegroundColor Green
         Write-Host ""
     }
+}
+
+# ==================== File Attribute Manipulation Detector ====================
+Write-Host "   [SYSTEM SCAN] File Attribute Manipulation Detection" -ForegroundColor Yellow
+Write-Host "   --------------------------------------------------------" -ForegroundColor DarkYellow
+Write-Host ""
+
+$attributeBypassDetected = $false
+$suspiciousAttributeFiles = @()
+
+# Check for files with hidden/system attributes in the mods folder
+try {
+    $allFiles = Get-ChildItem -Path $mods -Recurse -Force -ErrorAction SilentlyContinue
+    
+    foreach ($file in $allFiles) {
+        $isHidden = $false
+        $isSystem = $false
+        $isReadOnly = $false
+        
+        # Check file attributes
+        if ($file.Attributes -band [System.IO.FileAttributes]::Hidden) {
+            $isHidden = $true
+        }
+        if ($file.Attributes -band [System.IO.FileAttributes]::System) {
+            $isSystem = $true
+        }
+        if ($file.Attributes -band [System.IO.FileAttributes]::ReadOnly) {
+            $isReadOnly = $true
+        }
+        
+        # Flag suspicious attribute combinations
+        if ($isHidden -or $isSystem) {
+            $suspiciousAttributeFiles += [PSCustomObject]@{
+                FileName = $file.Name
+                FilePath = $file.FullName
+                IsHidden = $isHidden
+                IsSystem = $isSystem
+                IsReadOnly = $isReadOnly
+                Attributes = $file.Attributes.ToString()
+                Extension = $file.Extension
+            }
+            $attributeBypassDetected = $true
+        }
+    }
+    
+    if ($attributeBypassDetected) {
+        Write-Host "   [WARNING] File attribute manipulation detected!" -ForegroundColor Red
+        Write-Host "   Files with hidden/system attributes found:" -ForegroundColor Yellow
+        Write-Host ""
+        
+        foreach ($suspiciousFile in $suspiciousAttributeFiles) {
+            $attrFlags = @()
+            if ($suspiciousFile.IsHidden) { $attrFlags += "HIDDEN" }
+            if ($suspiciousFile.IsSystem) { $attrFlags += "SYSTEM" }
+            if ($suspiciousFile.IsReadOnly) { $attrFlags += "READONLY" }
+            
+            Write-Host "   [$($attrFlags -join ', ')] $($suspiciousFile.FileName)" -ForegroundColor Red
+            Write-Host "      Path: $($suspiciousFile.FilePath)" -ForegroundColor Gray
+            Write-Host "      Type: $($suspiciousFile.Extension) file" -ForegroundColor Gray
+            Write-Host ""
+        }
+        
+        Write-Host "   [INFO] These files may be using 'attrib -h/+h' for concealment" -ForegroundColor Yellow
+        Write-Host "   [INFO] Common bypass: attrib +h +s <file> to hide from Explorer" -ForegroundColor DarkYellow
+        Write-Host ""
+    } else {
+        Write-Host "   [STATUS] No file attribute manipulation detected" -ForegroundColor Green
+        Write-Host ""
+    }
+} catch {
+    Write-Host "   [ERROR] Failed to scan file attributes: $_" -ForegroundColor Red
+    Write-Host ""
+}
+
+# Check for Prefetch file manipulation (common attrib bypass target)
+Write-Host "   [SYSTEM SCAN] Prefetch File Protection Check" -ForegroundColor Yellow
+Write-Host "   --------------------------------------------------------" -ForegroundColor DarkYellow
+Write-Host ""
+
+$prefetchDir = "$env:SystemRoot\Prefetch"
+$protectedPrefetchFound = $false
+
+if (Test-Path $prefetchDir) {
+    try {
+        $prefetchFiles = Get-ChildItem -Path $prefetchDir -Filter "*.pf" -ErrorAction SilentlyContinue
+        
+        foreach ($pf in $prefetchFiles) {
+            if (($pf.Attributes -band [System.IO.FileAttributes]::ReadOnly) -or 
+                ($pf.Attributes -band [System.IO.FileAttributes]::Hidden) -or
+                ($pf.Attributes -band [System.IO.FileAttributes]::System)) {
+                
+                if (-not $protectedPrefetchFound) {
+                    Write-Host "   [WARNING] Protected/hidden Prefetch files detected!" -ForegroundColor Red
+                    Write-Host "   This may indicate 'attrib +r +h' protection" -ForegroundColor Yellow
+                    Write-Host ""
+                    $protectedPrefetchFound = $true
+                }
+                
+                Write-Host "   [PROTECTED] $($pf.Name)" -ForegroundColor Magenta
+                Write-Host "      Attributes: $($pf.Attributes)" -ForegroundColor Gray
+            }
+        }
+        
+        if (-not $protectedPrefetchFound) {
+            Write-Host "   [STATUS] No protected Prefetch files detected" -ForegroundColor Green
+            Write-Host ""
+        }
+    } catch {
+        Write-Host "   [INFO] Could not access Prefetch directory" -ForegroundColor DarkGray
+        Write-Host ""
+    }
+} else {
+    Write-Host "   [INFO] Prefetch directory not accessible" -ForegroundColor DarkGray
+    Write-Host ""
 }
 
 function Get-SHA1($filePath) { return (Get-FileHash -Path $filePath -Algorithm SHA1).Hash }
@@ -534,6 +648,7 @@ function Check-Strings($filePath) {
 
 # Collections for results
 $verifiedMods = @(); $unknownMods = @(); $suspiciousMods = @(); $sizeMismatchMods = @(); $tamperedMods = @(); $allModsInfo = @()
+$attributeManipulatedMods = @()
 
 # Process all mods
 $jarFiles = Get-ChildItem -Path $mods -Filter *.jar
@@ -553,6 +668,21 @@ Write-Host
 for ($i = 0; $i -lt $jarFiles.Count; $i++) {
     $file = $jarFiles[$i]
     Write-Host "`r   [ANALYZING] Module Scan: $($i+1) / $totalMods - $($file.Name)" -ForegroundColor Yellow -NoNewline
+    
+    # Check for attribute manipulation on mod files
+    $hasHiddenAttr = $file.Attributes -band [System.IO.FileAttributes]::Hidden
+    $hasSystemAttr = $file.Attributes -band [System.IO.FileAttributes]::System
+    
+    if ($hasHiddenAttr -or $hasSystemAttr) {
+        $attributeManipulatedMods += [PSCustomObject]@{
+            ModName = $jarModInfo.Name
+            FileName = $file.Name
+            FilePath = $file.FullName
+            Attributes = $file.Attributes.ToString()
+            IsHidden = ($hasHiddenAttr -ne $null)
+            IsSystem = ($hasSystemAttr -ne $null)
+        }
+    }
     
     # Get file info
     $hash = Get-SHA1 -filePath $file.FullName
@@ -865,6 +995,7 @@ $htmlReport = @"
         .suspicious-row { border-left: 4px solid var(--danger); background: linear-gradient(135deg, #fff3cd 0%, #fff8e1 100%) !important; }
         .tampered-row { border-left: 4px solid var(--magenta); background: linear-gradient(135deg, #fadbd8 0%, #f5b7b1 100%) !important; }
         .unknown-row { border-left: 4px solid var(--warning); }
+        .attribute-row { border-left: 4px solid #e67e22; background: linear-gradient(135deg, #ffeaa7 0%, #fdcb6e 100%) !important; }
         
         .badge {
             display: inline-block;
@@ -880,6 +1011,7 @@ $htmlReport = @"
         .badge-danger { background: var(--danger); color: white; }
         .badge-info { background: var(--info); color: white; }
         .badge-magenta { background: var(--magenta); color: white; }
+        .badge-orange { background: #e67e22; color: white; }
         
         .footer {
             text-align: center;
@@ -919,6 +1051,10 @@ $htmlReport += "<div class='summary-cards'>
     <div class='card magenta'>
         <h3>Tampered</h3>
         <p>$($tamperedMods.Count)</p>
+    </div>
+    <div class='card' style='border-bottom: 4px solid #e67e22;'>
+        <h3>Hidden Files</h3>
+        <p style='color: #e67e22;'>$($attributeManipulatedMods.Count)</p>
     </div>
 </div>"
 
@@ -1018,6 +1154,74 @@ if ($minecraftProcessesInfo.Count -gt 0) {
     }
     
    $htmlReport += "</tbody></table></div>"
+}
+
+# File Attribute Manipulation Section
+if ($attributeManipulatedMods.Count -gt 0) {
+    $htmlReport += "<div class='section'>
+        <h2>[ATTR BYPASS] Hidden/Manipulated Files ($($attributeManipulatedMods.Count))</h2>
+        <p style='color: var(--danger); font-weight: bold;'>⚠ Files using 'attrib -h/+h' or similar attribute manipulation detected!</p>
+        <table>
+            <thead>
+                <tr>
+                    <th>File</th>
+                    <th>Product</th>
+                    <th>Attributes</th>
+                    <th>Bypass Method</th>
+                </tr>
+            </thead>
+            <tbody>"
+    
+    foreach ($mod in $attributeManipulatedMods) {
+        $bypassMethods = @()
+        if ($mod.IsHidden) { $bypassMethods += "attrib +h" }
+        if ($mod.IsSystem) { $bypassMethods += "attrib +s" }
+        
+        $htmlReport += "<tr class='attribute-row'>
+            <td style='font-family: monospace;'>$($mod.FileName)</td>
+            <td>$($mod.ModName)</td>
+            <td style='color: #e67e22; font-weight: bold;'>$($mod.Attributes)</td>
+            <td style='color: var(--danger);'>$($bypassMethods -join ', ')</td>
+        </tr>"
+    }
+    
+    $htmlReport += "</tbody></table>
+    <p style='margin-top: 15px; padding: 10px; background: #fff3cd; border-left: 4px solid #e67e22;'>
+        <strong>⚠ ATTRIB BYPASS DETECTED:</strong> These files have hidden and/or system attributes set.<br>
+        This is commonly done using <code>attrib +h +s filename</code> to conceal cheat clients from casual inspection.<br>
+        <strong>Remediation:</strong> Run <code>attrib -h -s "filepath"</code> to reveal and delete these files.
+    </p>
+    </div>"
+}
+
+# Suspicious Attribute Files Section (non-mod files)
+if ($suspiciousAttributeFiles.Count -gt 0) {
+    $htmlReport += "<div class='section'>
+        <h2>[HIDDEN FILES] Other Files with Manipulated Attributes ($($suspiciousAttributeFiles.Count))</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>File</th>
+                    <th>Path</th>
+                    <th>Attributes</th>
+                </tr>
+            </thead>
+            <tbody>"
+    
+    foreach ($file in $suspiciousAttributeFiles) {
+        $attrFlags = @()
+        if ($file.IsHidden) { $attrFlags += "HIDDEN" }
+        if ($file.IsSystem) { $attrFlags += "SYSTEM" }
+        if ($file.IsReadOnly) { $attrFlags += "READONLY" }
+        
+        $htmlReport += "<tr class='attribute-row'>
+            <td style='font-family: monospace;'>$($file.FileName)</td>
+            <td style='font-family: monospace; font-size: 0.8rem;'>$($file.FilePath)</td>
+            <td style='color: #e67e22; font-weight: bold;'>$($attrFlags -join ', ')</td>
+        </tr>"
+    }
+    
+    $htmlReport += "</tbody></table></div>"
 }
 
 # Verified Mods Section
@@ -1335,6 +1539,29 @@ if ($tamperedMods.Count -gt 0) {
     }
 }
 
+if ($attributeManipulatedMods.Count -gt 0) {
+    Write-Host "   [ATTRIB BYPASS] HIDDEN/MANIPULATED FILES DETECTED ($($attributeManipulatedMods.Count))" -ForegroundColor Red
+    Write-Host "   " + ("-" * 40) -ForegroundColor DarkGray
+    Write-Host ""
+    
+    foreach ($mod in $attributeManipulatedMods) {
+        $attrFlags = @()
+        if ($mod.IsHidden) { $attrFlags += "HIDDEN" }
+        if ($mod.IsSystem) { $attrFlags += "SYSTEM" }
+        
+        Write-Host "     [$($attrFlags -join ', ')] $($mod.FileName)" -ForegroundColor Red
+        Write-Host "       Product: $($mod.ModName)" -ForegroundColor Yellow
+        Write-Host "       Attributes: $($mod.Attributes)" -ForegroundColor White
+        Write-Host "       Path: $($mod.FilePath)" -ForegroundColor Gray
+        Write-Host ""
+    }
+    
+    Write-Host "   [WARNING] These files are using 'attrib +h/+s' bypass method!" -ForegroundColor Red
+    Write-Host "   [INFO] Common technique to hide cheat clients from File Explorer" -ForegroundColor Yellow
+    Write-Host "   [REMEDIATION] Run: attrib -h -s `"filepath`" to reveal and delete" -ForegroundColor DarkYellow
+    Write-Host ""
+}
+
 Write-Host "   [SCAN SUMMARY] ANALYSIS COMPLETE" -ForegroundColor Cyan
 Write-Host "   " + ("=" * 50) -ForegroundColor Blue
 Write-Host "       Total files analyzed: " -ForegroundColor Gray -NoNewline
@@ -1347,6 +1574,8 @@ Write-Host "       Signature matches: " -ForegroundColor Gray -NoNewline
 Write-Host "$($suspiciousMods.Count)" -ForegroundColor Red
 Write-Host "       Integrity mismatches: " -ForegroundColor Gray -NoNewline
 Write-Host "$($tamperedMods.Count)" -ForegroundColor Magenta
+Write-Host "       Hidden/Attrib files: " -ForegroundColor Gray -NoNewline
+Write-Host "$($attributeManipulatedMods.Count)" -ForegroundColor Red
 Write-Host
 Write-Host "   " + ("=" * 50) -ForegroundColor Blue
 Write-Host ""
