@@ -75,7 +75,7 @@ if ($javaProcesses.Count -eq 0) {
 
     foreach ($proc in $javaProcesses) {
         # Get full command line
-        $commandLine = (Get-CimInstance Win32_Process -Filter "ProcessId = $($proc.Id)")).CommandLine
+        $commandLine = (Get-CimInstance Win32_Process -Filter "ProcessId = $($proc.Id)").CommandLine
         
         # Store process info for HTML report
         $processInfo = [PSCustomObject]@{
