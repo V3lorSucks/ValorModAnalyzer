@@ -1189,7 +1189,7 @@ if ($attributeManipulatedMods.Count -gt 0) {
     <p style='margin-top: 15px; padding: 10px; background: #fff3cd; border-left: 4px solid #e67e22;'>
         <strong>⚠ ATTRIB BYPASS DETECTED:</strong> These files have hidden and/or system attributes set.<br>
         This is commonly done using <code>attrib +h +s filename</code> to conceal cheat clients from casual inspection.<br>
-        <strong>Remediation:</strong> Run <code>attrib -h -s "filepath"</code> to reveal and delete these files.
+        <strong>Remediation:</strong> Run <code>attrib -h -s `'filepath`'</code> to reveal and delete these files.
     </p>
     </div>"
 }
