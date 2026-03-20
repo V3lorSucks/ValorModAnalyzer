@@ -76,7 +76,7 @@ if ($javaProcesses.Count -eq 0) {
     foreach ($proc in $javaProcesses) {
         # Get full command line
         $commandLine = (Get-CimInstance Win32_Process -Filter "ProcessId = $($proc.Id)").CommandLine
-        
+            
         # Store process info for HTML report
         $processInfo = [PSCustomObject]@{
             ProcessId = $proc.Id
@@ -84,25 +84,131 @@ if ($javaProcesses.Count -eq 0) {
             StartTime = $proc.StartTime
             CommandLine = $commandLine
             HasFabricAddMods = $commandLine -match '-Dfabric\.addMods'
+            HasJavaAgent = $false
+            JavaAgentPath = $null
+            IsLegitimateAgent = $false
+            LegitimateAgentPath = $null
         }
         $minecraftProcessesInfo += $processInfo
-        
+            
         if ($commandLine -match '-Dfabric\.addMods') {
             $foundFabricAddMods = $true
-                    
+                        
             Write-Host "   [WARNING] External Fabric mod loading detected" -ForegroundColor Yellow
             Write-Host "   Process ID: $($proc.Id)" -ForegroundColor Yellow
             Write-Host "   Status: External mod loading active" -ForegroundColor Yellow
             Write-Host ""
-                    
+                        
             # Extract the fabric.addMods argument
-            if ($commandLine -match '-Dfabric\.addMods=([\^\s]+)') {
+            if ($commandLine -match '-Dfabric\.addMods=([^\s]+)') {
                 $fabricAddModsValue = $matches[1]
                 Write-Host "-Dfabric.addMods=$fabricAddModsValue" -ForegroundColor Magenta
-            }
                     
+                # Check if the path exists and scan it
+                if (Test-Path $fabricAddModsValue) {
+                    Write-Host "   [CRITICAL] External mod directory detected: $fabricAddModsValue" -ForegroundColor Red
+                        
+                    # Scan the external mod directory
+                    try {
+                        $externalMods = Get-ChildItem -Path $fabricAddModsValue -Filter "*.jar" -ErrorAction SilentlyContinue
+                        if ($externalMods) {
+                            Write-Host "   [EXTERNAL MODS] Found $($externalMods.Count) mod(s) in external directory:" -ForegroundColor Yellow
+                            foreach ($extMod in $externalMods) {
+                                Write-Host "      - $($extMod.Name)" -ForegroundColor Yellow
+                            }
+                        }
+                    } catch {}
+                } else {
+                    Write-Host "   [WARNING] External mod path does not exist: $fabricAddModsValue" -ForegroundColor Yellow
+                }
+            }
+                        
             Write-Host ""
             Write-Host "   [INFO] Additional mods loaded outside standard directory" -ForegroundColor Yellow
+            Write-Host ""
+        }
+            
+        # Check for javaagent arguments
+        if ($commandLine -match '-javaagent:([^\s]+)') {
+            $javaAgentPath = $matches[1]
+                    
+            # Check if this is a known legitimate launcher agent
+            $isLegitimateAgent = $false
+            $legitimateAgentPatterns = @(
+                'theseus\.jar',           # Modrinth Launcher agent
+                'metadata\.jar',          # Common launcher metadata
+                'NewLaunch\.jar'          # Known launcher component
+            )
+                    
+            foreach ($pattern in $legitimateAgentPatterns) {
+                if ($javaAgentPath -match $pattern) {
+                    $isLegitimateAgent = $true
+                    Write-Host "   [INFO] Legitimate launcher agent detected: $javaAgentPath" -ForegroundColor Cyan
+                    Write-Host "   Status: Known launcher component (not flagged)" -ForegroundColor Green
+                    break
+                }
+            }
+                    
+            if (-not $isLegitimateAgent) {
+                Write-Host "   [CRITICAL] Java Agent detected!" -ForegroundColor Red
+                Write-Host "   Process ID: $($proc.Id)" -ForegroundColor Red
+                Write-Host "   Agent Path: $javaAgentPath" -ForegroundColor Magenta
+                Write-Host "   [WARNING] Java agents can inject arbitrary code and bypass security checks" -ForegroundColor Red
+                Write-Host ""
+                        
+                # Add javaagent info to process object only for suspicious agents
+                $processInfo.HasJavaAgent = $true
+                $processInfo.JavaAgentPath = $javaAgentPath
+            } else {
+                # Mark as legitimate for HTML report
+                $processInfo.HasJavaAgent = $false
+                $processInfo.JavaAgentPath = $null
+                $processInfo.IsLegitimateAgent = $true
+                $processInfo.LegitimateAgentPath = $javaAgentPath
+            }
+        }
+            
+        # Check for argfile references and scan their contents
+        if ($commandLine -match '@([\w]:\\[^\s]+\.txt|/[^\s]+\.txt)') {
+            $argFilePath = $matches[1]
+            Write-Host "   [INFO] Argfile reference detected: $argFilePath" -ForegroundColor Cyan
+                
+            if (Test-Path $argFilePath) {
+                try {
+                    $argFileContent = Get-Content -Path $argFilePath -Raw -ErrorAction SilentlyContinue
+                    Write-Host "   [ARGFILE CONTENT] Reading: $argFilePath" -ForegroundColor Cyan
+                    Write-Host "   $argFileContent" -ForegroundColor DarkGray
+                        
+                    # Check for dangerous arguments in argfile
+                    if ($argFileContent -match '-Dfabric\.addMods=([^\r\n]+)') {
+                        $fabricPathFromArgfile = $matches[1]
+                        Write-Host "   [CRITICAL] Argfile contains external mod loading: -Dfabric.addMods=$fabricPathFromArgfile" -ForegroundColor Red
+                            
+                        if (Test-Path $fabricPathFromArgfile) {
+                            Write-Host "   [CRITICAL] External mod directory from argfile: $fabricPathFromArgfile" -ForegroundColor Red
+                            $externalMods = Get-ChildItem -Path $fabricPathFromArgfile -Filter "*.jar" -ErrorAction SilentlyContinue
+                            if ($externalMods) {
+                                Write-Host "   [EXTERNAL MODS] Found $($externalMods.Count) mod(s):" -ForegroundColor Yellow
+                                foreach ($extMod in $externalMods) {
+                                    Write-Host "      - $($extMod.Name)" -ForegroundColor Yellow
+                                }
+                            }
+                        }
+                    }
+                        
+                    # Check for javaagent in argfile
+                    if ($argFileContent -match '-javaagent:([^\r\n]+)') {
+                        $javaAgentFromArgfile = $matches[1]
+                        Write-Host "   [CRITICAL] Argfile contains Java Agent: -javaagent:$javaAgentFromArgfile" -ForegroundColor Red
+                        Write-Host "   [WARNING] This can bypass security checks" -ForegroundColor Red
+                    }
+                        
+                } catch {
+                    Write-Host "   [ERROR] Failed to read argfile: $_" -ForegroundColor Red
+                }
+            } else {
+                Write-Host "   [WARNING] Argfile not found: $argFilePath" -ForegroundColor Yellow
+            }
             Write-Host ""
         }
     }
@@ -673,17 +779,6 @@ for ($i = 0; $i -lt $jarFiles.Count; $i++) {
     $hasHiddenAttr = $file.Attributes -band [System.IO.FileAttributes]::Hidden
     $hasSystemAttr = $file.Attributes -band [System.IO.FileAttributes]::System
     
-    if ($hasHiddenAttr -or $hasSystemAttr) {
-        $attributeManipulatedMods += [PSCustomObject]@{
-            ModName = $jarModInfo.Name
-            FileName = $file.Name
-            FilePath = $file.FullName
-            Attributes = $file.Attributes.ToString()
-            IsHidden = ($hasHiddenAttr -ne $null)
-            IsSystem = ($hasSystemAttr -ne $null)
-        }
-    }
-    
     # Get file info
     $hash = Get-SHA1 -filePath $file.FullName
     $actualSize = $file.Length; $actualSizeKB = [math]::Round($actualSize/1KB, 2)
@@ -706,6 +801,7 @@ for ($i = 0; $i -lt $jarFiles.Count; $i++) {
         $modData = Fetch-Modrinth-By-Filename -filename $file.Name -preferredLoader $preferredLoader
     }
     
+    # Build mod entry for analysis
     if ($modData.Name) {
         $sizeDiff = $actualSize - $modData.ExpectedSize
         $expectedSizeKB = if ($modData.ExpectedSize -gt 0) { [math]::Round($modData.ExpectedSize/1KB, 2) } else { 0 }
@@ -717,7 +813,7 @@ for ($i = 0; $i -lt $jarFiles.Count; $i++) {
             IsModrinthDownload = $zoneInfo.IsModrinth; ModrinthUrl = $modData.ModrinthUrl; IsVerified = $true; MatchType = $modData.MatchType
             ExactMatch = $modData.ExactMatch; IsLatestVersion = $modData.IsLatestVersion; LoaderType = $modData.LoaderType
             PreferredLoader = $preferredLoader; FilePath = $file.FullName; JarModId = $jarModInfo.ModId; JarName = $jarModInfo.Name
-            JarVersion = $jarModInfo.Version; JarModLoader = $jarModInfo.ModLoader
+            JarVersion = $jarModInfo.Version; JarModLoader = $jarModInfo.ModLoader; HasHiddenAttr = $hasHiddenAttr; HasSystemAttr = $hasSystemAttr
         }
         
         $verifiedMods += $modEntry; $allModsInfo += $modEntry
@@ -733,7 +829,7 @@ for ($i = 0; $i -lt $jarFiles.Count; $i++) {
             SourceURL = $zoneInfo.URL; IsModrinthDownload = $zoneInfo.IsModrinth; IsVerified = $true; MatchType = "Megabase"
             ExactMatch = $false; IsLatestVersion = $false; LoaderType = "Unknown"; PreferredLoader = $preferredLoader
             FilePath = $file.FullName; JarModId = $jarModInfo.ModId; JarName = $jarModInfo.Name; JarVersion = $jarModInfo.Version
-            JarModLoader = $jarModInfo.ModLoader
+            JarModLoader = $jarModInfo.ModLoader; HasHiddenAttr = $hasHiddenAttr; HasSystemAttr = $hasSystemAttr
         }
         
         $verifiedMods += $modEntry; $allModsInfo += $modEntry
@@ -744,13 +840,26 @@ for ($i = 0; $i -lt $jarFiles.Count; $i++) {
             ExpectedSize = 0; ExpectedSizeKB = 0; SizeDiff = 0; SizeDiffKB = 0; ModrinthUrl = ""; ModName = ""; MatchType = ""
             ExactMatch = $false; IsLatestVersion = $false; LoaderType = "Unknown"; PreferredLoader = $preferredLoader
             JarModId = $jarModInfo.ModId; JarName = $jarModInfo.Name; JarVersion = $jarModInfo.Version; JarModLoader = $jarModInfo.ModLoader
+            HasHiddenAttr = $hasHiddenAttr; HasSystemAttr = $hasSystemAttr
         }
         
         $unknownMods += $unknownModEntry; $allModsInfo += $unknownModEntry
     }
+    
+    # Track attribute manipulation separately for reporting
+    if ($hasHiddenAttr -or $hasSystemAttr) {
+        $attributeManipulatedMods += [PSCustomObject]@{
+            ModName = if ($modData.Name) { $modData.Name } else { "Unknown" }
+            FileName = $file.Name
+            FilePath = $file.FullName
+            Attributes = $file.Attributes.ToString()
+            IsHidden = ($hasHiddenAttr -ne $null)
+            IsSystem = ($hasSystemAttr -ne $null)
+        }
+    }
 }
 
-Write-Host "`r$( * 120)`r" -NoNewline
+Write-Host "`r$(' ' * 120)`r" -NoNewline
 
 # Try to identify unknown mods
 for ($i = 0; $i -lt $unknownMods.Count; $i++) {
@@ -780,7 +889,7 @@ for ($i = 0; $i -lt $unknownMods.Count; $i++) {
     }
 }
 
-# Deep pattern scan on unknown mods
+# Deep pattern scan on unknown mods (including those with attribute manipulation)
 if ($unknownMods.Count -gt 0) {
     Write-Host "   [DEEP_ANALYSIS] Examining $($unknownMods.Count) unverified module(s) for threat signatures..." -ForegroundColor Cyan
     
@@ -843,26 +952,38 @@ if ($unknownMods.Count -gt 0) {
         Write-Host "`r   [ERROR] During deep analysis: $($_.Exception.Message)" -ForegroundColor Red
     }
     
-    Write-Host "`r$( * 120)`r" -NoNewline
+    Write-Host "`r$(' ' * 120)`r" -NoNewline
 }
 
-# Also scan verified mods for suspicious patterns
+# Also scan verified mods for suspicious patterns (including those with attribute manipulation)
 Write-Host "   [PATTERN_SCAN] Inspecting verified modules for malicious signatures..." -ForegroundColor Cyan
 $counter = 0
 foreach ($mod in $allModsInfo) {
     $counter++
     Write-Host "`r   [PATTERN_SCAN] Signature Verification: $counter / $($allModsInfo.Count) - $($mod.FileName)" -ForegroundColor Yellow -NoNewline
     
+    # Check for attribute manipulation flag
+    $hasAttributeBypass = ($mod.HasHiddenAttr -or $mod.HasSystemAttr)
+    
+    # Only flag as suspicious if it has patterns AND is NOT a signature match (verified)
     if ($modStrings = Check-Strings $mod.FilePath) {
+        # If mod is verified with exact match, don't flag as suspicious
+        # Signature match takes precedence over pattern detection
+        if ($mod.IsVerified -eq $true -and ($mod.MatchType -match 'Exact')) {
+            # This is a verified mod with signature match, skip pattern flagging
+            continue
+        }
+        
         $suspiciousMods += [PSCustomObject]@{ 
             FileName = $mod.FileName; DetectedPatterns = $modStrings;
             ModName = $mod.ModName; DownloadSource = $mod.DownloadSource; 
             IsVerifiedMod = ($mod.IsVerified -eq $true); HasSizeMismatch = ($mod.SizeDiffKB -ne 0 -and [math]::Abs($mod.SizeDiffKB) -gt 1)
+            HasAttributeBypass = $hasAttributeBypass
         }
     }
 }
 
-Write-Host "`r$( * 120)`r" -NoNewline
+Write-Host "`r$(' ' * 120)`r" -NoNewline
 
 # Generate HTML Report
 Write-Host ""
@@ -1058,30 +1179,178 @@ $htmlReport += "<div class='summary-cards'>
     </div>
 </div>"
 
-# Fabric AddMods Section
-$htmlReport += "<div class='section'>
-    <h2>[FABRIC] External Mods Check</h2>"
-
+# Fabric AddMods Section - Scan external mods and add them to the main analysis
 $fabricAddModsDetected = $javaProcesses | Where-Object { 
     try { 
         (Get-CimInstance Win32_Process -Filter "ProcessId = $($_.Id)" -ErrorAction Stop).CommandLine -match '-Dfabric\.addMods'
     } catch { $false }
 }
 
-if ($fabricAddModsDetected) {
-    $htmlReport += "<p style='color: var(--warning); font-weight: bold;'>[WARNING] External Fabric mod loading detected</p>"
-   foreach ($proc in $fabricAddModsDetected) {
+# Check for argfiles that might contain fabric.addMods
+$externalModDirectories = @()
+foreach ($proc in $javaProcesses) {
+    try {
         $cmdLine = (Get-CimInstance Win32_Process -Filter "ProcessId = $($proc.Id)").CommandLine
-       if ($cmdLine -match '-Dfabric\.addMods=([\^\s]+)') {
-            $htmlReport += "<p><strong>Process ID:</strong> $($proc.Id)</p>"
-            $htmlReport += "<p style='font-family: monospace; background: #f8f9fa; padding: 10px; border-radius: 4px;'>-Dfabric.addMods=$($matches[1])</p>"
+        # Direct fabric.addMods
+        if ($cmdLine -match '-Dfabric\.addMods=([^\s]+)') {
+            $externalModDirectories += $matches[1]
         }
-    }
-} else {
-    $htmlReport += "<p style='color: var(--success);'>[OK] No unauthorized external mod loading detected</p>"
+        # Argfile-based fabric.addMods
+        if ($cmdLine -match '@([\w]:\\[^\s]+\.txt|/[^\s]+\.txt)') {
+            $argfilePath = $matches[1]
+            if (Test-Path $argfilePath) {
+                $argfileContent = Get-Content -Path $argfilePath -Raw -ErrorAction SilentlyContinue
+                if ($argfileContent -match '-Dfabric\.addMods=([^\r\n]+)') {
+                    $externalModDirectories += $matches[1]
+                }
+            }
+        }
+    } catch {}
 }
 
-$htmlReport += "</div>"
+if ($externalModDirectories.Count -gt 0) {
+    $htmlReport += "<div class='section'>
+        <h2>[EXTERNAL MODS] External Mod Directories Detected</h2>
+        <p style='color: var(--warning); font-weight: bold;'>External mod loading detected via JVM arguments</p>"
+    
+    foreach ($modDir in $externalModDirectories) {
+        # Check if directory is accessible
+        if (-not (Test-Path $modDir)) {
+            $htmlReport += "<div style='margin-bottom: 20px; padding: 15px; background: #ffe6e6; border-left: 4px solid #dc3545;'>"
+            $htmlReport += "<p style='color: #dc3545; font-weight: bold;'>⚠ External mod directory not found or inaccessible: $modDir</p>"
+            $htmlReport += "</div>"
+            continue
+        }
+        
+        try {
+            $externalMods = Get-ChildItem -Path $modDir -Filter "*.jar" -ErrorAction SilentlyContinue
+            if ($externalMods) {
+                $htmlReport += "<div style='margin-bottom: 20px; padding: 15px; background: #fff3cd; border-left: 4px solid #ffc107;'>"
+                $htmlReport += "<p style='font-family: monospace; font-weight: bold; margin-bottom: 10px;'>Directory: $modDir</p>"
+                $htmlReport += "<p style='margin-bottom: 10px;'><strong>Found $($externalMods.Count) external mod(s):</strong></p>"
+                $htmlReport += "<ul style='font-family: monospace; list-style-type: none; padding-left: 20px;'>"
+                foreach ($extMod in $externalMods) {
+                    $htmlReport += "<li style='padding: 5px 0;'>- $($extMod.Name)</li>"
+                }
+                $htmlReport += "</ul>"
+                $htmlReport += "</div>"
+                
+                # Add these mods to the scan queue
+                foreach ($extMod in $externalMods) {
+                    # Check if this mod is already in our list
+                    $exists = $false
+                    foreach ($existingMod in $allModsInfo) {
+                        if ($existingMod.FileName -eq $extMod.Name) {
+                            $exists = $true
+                            break
+                        }
+                    }
+                    
+                    if (-not $exists) {
+                        try {
+                            # Try to read file details - might fail for protected locations
+                            $fileInfo = Get-Item $extMod.FullName -ErrorAction Stop
+                            
+                            # Add external mod to analysis
+                            $modEntry = [PSCustomObject]@{
+                                FileName = $extMod.Name
+                                FilePath = $extMod.FullName
+                                FileSize = $fileInfo.Length
+                                LastModified = $fileInfo.LastWriteTime
+                                ModName = "Unknown"
+                                Version = "Unknown"
+                                Author = "Unknown"
+                                Description = ""
+                                IsVerified = $false
+                                IsSuspicious = $false
+                                IsTampered = $false
+                                IsUnknown = $true
+                                MatchType = ""
+                                LoaderType = "Unknown"
+                                DownloadSource = "Unknown"
+                                IsModrinthDownload = $false
+                                HashMatches = $false
+                                SignatureMatch = $false
+                                PatternsFound = @()
+                                Reason = "External mod loaded via JVM argument from: $modDir"
+                            }
+                            $unknownMods += $modEntry
+                            $allModsInfo += $modEntry
+                        } catch {
+                            Write-Host "   [WARNING] Cannot access external mod file: $($extMod.Name) - Access denied or file locked" -ForegroundColor Yellow
+                        }
+                    }
+                }
+            } else {
+                $htmlReport += "<div style='margin-bottom: 20px; padding: 15px; background: #fff3cd; border-left: 4px solid #ffc107;'>"
+                $htmlReport += "<p style='font-family: monospace; font-weight: bold;'>Directory: $modDir</p>"
+                $htmlReport += "<p style='color: var(--warning);'>No .jar files found in this directory</p>"
+                $htmlReport += "</div>"
+            }
+        } catch {
+            $htmlReport += "<div style='margin-bottom: 20px; padding: 15px; background: #ffe6e6; border-left: 4px solid #dc3545;'>"
+            $htmlReport += "<p style='color: #dc3545; font-weight: bold;'>⚠ Cannot access directory (Permission denied): $modDir</p>"
+            $htmlReport += "<p style='font-size: 0.9rem;'>This directory appears to be protected by Windows. Run the script as Administrator to scan external mods in protected locations.</p>"
+            $htmlReport += "</div>"
+        }
+    }
+    
+    $htmlReport += "<p style='margin-top: 15px; padding: 10px; background: #fff3cd; border-left: 4px solid #ffc107;'>
+        <strong>INFO:</strong> External mods will be scanned and categorized below based on verification results.
+    </p>
+    </div>"
+}
+
+# JavaAgent Detection Section - Only show suspicious agents
+$javaAgentDetected = $false
+$suspiciousJavaAgents = @()
+
+foreach ($proc in $javaProcesses) {
+    try {
+        $cmdLine = (Get-CimInstance Win32_Process -Filter "ProcessId = $($proc.Id)").CommandLine
+        if ($cmdLine -match '-javaagent:([^\s]+)') {
+            $agentPath = $matches[1]
+            
+            # Check if legitimate (skip these)
+            $isLegitimate = $false
+            $legitimatePatterns = @('theseus\.jar', 'metadata\.jar', 'NewLaunch\.jar')
+            foreach ($pattern in $legitimatePatterns) {
+                if ($agentPath -match $pattern) {
+                    $isLegitimate = $true
+                    break
+                }
+            }
+            
+            # Only track suspicious agents
+            if (-not $isLegitimate) {
+                $javaAgentDetected = $true
+                $suspiciousJavaAgents += [PSCustomObject]@{
+                    ProcessId = $proc.Id
+                    AgentPath = $agentPath
+                }
+            }
+        }
+    } catch {}
+}
+
+# Show only suspicious agents
+if ($javaAgentDetected) {
+    $htmlReport += "<div class='section'>
+        <h2 style='color: var(--danger);'>[CRITICAL] Suspicious Java Agent Detected</h2>
+        <p style='color: var(--danger); font-weight: bold;'>WARNING: Java agents can inject arbitrary code and bypass all security checks!</p>"
+    
+    foreach ($agent in $suspiciousJavaAgents) {
+        $htmlReport += "<p><strong>Process ID:</strong> $($agent.ProcessId)</p>"
+        $htmlReport += "<p style='font-family: monospace; background: #ffe6e6; padding: 10px; border-radius: 4px; color: var(--danger);'>-javaagent:$($agent.AgentPath)</p>"
+    }
+    
+    $htmlReport += "<p style='margin-top: 15px; padding: 10px; background: #fff3cd; border-left: 4px solid #e67e22;'>
+        <strong>SECURITY RISK:</strong> Java agents have full access to the JVM and can modify bytecode at runtime.<br>
+        This is a common method used by cheat clients to bypass anti-cheat systems.<br>
+        <strong>Remediation:</strong> Remove the -javaagent argument from your launcher configuration.
+    </p>
+    </div>"
+}
 
 # Minecraft Process JVM Arguments Section
 if ($minecraftProcessesInfo.Count -gt 0) {
@@ -1100,53 +1369,69 @@ if ($minecraftProcessesInfo.Count -gt 0) {
     
     foreach ($procInfo in $minecraftProcessesInfo) {
         $startTimeFormatted = Get-Date $procInfo.StartTime -Format 'yyyy-MM-dd HH:mm:ss'
-        $fabricBadge = if ($procInfo.HasFabricAddMods) { 
-            "<span class='badge badge-warning'>Fabric AddMods</span> " 
-        } else { 
-            "" 
+        
+        # Build badges for security issues
+        $badges = ""
+        if ($procInfo.HasFabricAddMods) { 
+            $badges += "<span class='badge badge-warning'>Fabric AddMods</span> " 
+        }
+        if ($procInfo.HasJavaAgent) {
+            $badges += "<span class='badge' style='background: var(--danger); color: white;'>Java Agent</span> "
         }
         
         # Extract only user-specified arguments (filter out standard launcher args)
         $userArgs = @()
-       if ($procInfo.CommandLine) {
+        if ($procInfo.CommandLine) {
             # Split command line into parts
             $parts = $procInfo.CommandLine -split '\s+'
             
             # Filter for user-relevant arguments
             foreach ($part in $parts) {
-                # Only include @argfile paths - these are truly user-modifiable
-                 if ($part -match '^@' -or $part -match '^-javaagent:') {
-                    # Include @argfile references (these are user-modifiable)
+                # Include @argfile paths, javaagent, custom system properties, and JVM flags
+                if ($part -match '^@' -or $part -match '^-javaagent:') {
+                    # Include @argfile references and javaagent (these are user-modifiable)
                     $userArgs += $part
                 }
-             elseif ($part -match '^-D(?!java\.|jna\.|org\.lwjgl|io\.netty|minecraft\.launcher|log4j|sun\.|file\.|user\.|os\.|FabricMcEmu|modrinth\.internal\.)') {
+                elseif ($part -match '^-D(?!java\.|jna\.|org\.lwjgl|io\.netty|minecraft\.launcher|log4j|sun\.|file\.|user\.|os\.|FabricMcEmu|modrinth\.internal\.)') {
                     # Include custom system properties but exclude standard Java/Minecraft/Launcher ones
                     $userArgs += $part
                 }
-             elseif ($part -match '^-X' -or $part -match '^-XX:') {
+                elseif ($part -match '^-X' -or $part -match '^-XX:') {
                     # Include memory and JVM flags (these are typically user-configured)
                     $userArgs += $part
                 }
-            elseif ($part -match '^-D(?!java\.|jna\.|org\.lwjgl|io\.netty|minecraft\.launcher|log4j|sun\.|file\.|user\.|os\.|FabricMcEmu|modrinth\.internal\.)') {
-                    # Include custom system properties but exclude standard Java/Minecraft/Launcher ones
-                    $userArgs += $part
-                }
-         elseif ($part -match '^-X' -or $part -match '^-XX:') {
-                    # Include memory and JVM flags (these are typically user-configured)
-                    $userArgs += $part
-                }
-           }
+            }
         }
         
-        $argsDisplay = if ($userArgs.Count-gt 0) {
-            $escapedArgs = ($userArgs | ForEach-Object { $_ -replace '&', '&amp;' -replace '<', '&lt;' -replace '>', '&gt;' }) -join ' '
-            $escapedArgs
+        $argsDisplay = if ($userArgs.Count -gt 0) {
+            # Escape HTML special characters
+            $escapedArgs = $userArgs | ForEach-Object { 
+                $_ -replace '&', '&amp;' -replace '<', '&lt;' -replace '>', '&gt;'
+            }
+            $displayString = $escapedArgs -join ' '
+            
+            # Highlight javaagent in red
+            if ($displayString -match 'javaagent') {
+                $displayString = $displayString -replace '(-javaagent:[^\s]+)', '<span style="color: var(--danger); font-weight: bold;">$1</span>'
+            }
+            
+            # Highlight argfile references in blue
+            if ($displayString -match '@[^\s]+') {
+                $displayString = $displayString -replace '(@[^\s]+)', '<span style="color: #0066cc; font-weight: bold;">$1</span>'
+            }
+            
+            # Highlight fabric.addMods in orange
+            if ($displayString -match '-Dfabric\.addMods') {
+                $displayString = $displayString -replace '(-Dfabric\.addMods=[^\s]+)', '<span style="color: #e67e22; font-weight: bold;">$1</span>'
+            }
+            
+            $displayString
         } else {
             "<em style='color: var(--success);'>No custom arguments</em>"
         }
         
        $htmlReport += "<tr>
-            <td>${fabricBadge}$($procInfo.ProcessName)</td>
+            <td>${badges}$($procInfo.ProcessName)</td>
             <td>$($procInfo.ProcessId)</td>
             <td>$startTimeFormatted</td>
             <td style='font-family: monospace; font-size: 0.75rem; word-break: break-all;'>$argsDisplay</td>
@@ -1160,7 +1445,7 @@ if ($minecraftProcessesInfo.Count -gt 0) {
 if ($attributeManipulatedMods.Count -gt 0) {
     $htmlReport += "<div class='section'>
         <h2>[ATTR BYPASS] Hidden/Manipulated Files ($($attributeManipulatedMods.Count))</h2>
-        <p style='color: var(--danger); font-weight: bold;'>⚠ Files using 'attrib -h/+h' or similar attribute manipulation detected!</p>
+        <p style='color: var(--danger); font-weight: bold;'>WARNING: Files using 'attrib -h/+h' or similar attribute manipulation detected!</p>
         <table>
             <thead>
                 <tr>
@@ -1187,7 +1472,7 @@ if ($attributeManipulatedMods.Count -gt 0) {
     
     $htmlReport += "</tbody></table>
     <p style='margin-top: 15px; padding: 10px; background: #fff3cd; border-left: 4px solid #e67e22;'>
-        <strong>⚠ ATTRIB BYPASS DETECTED:</strong> These files have hidden and/or system attributes set.<br>
+        <strong>WARNING: ATTRIB BYPASS DETECTED:</strong> These files have hidden and/or system attributes set.<br>
         This is commonly done using <code>attrib +h +s filename</code> to conceal cheat clients from casual inspection.<br>
         <strong>Remediation:</strong> Run <code>attrib -h -s `'filepath`'</code> to reveal and delete these files.
     </p>
@@ -1326,8 +1611,14 @@ if ($suspiciousMods.Count -gt 0) {
         $patternsList = ($mod.DetectedPatterns | Sort-Object) -join ", "
         $productName = if ($mod.ModName) { $mod.ModName } else { "Unknown" }
         
+        # Add attribute bypass warning if applicable
+        $attributeWarning = ""
+        if ($mod.HasAttributeBypass) {
+            $attributeWarning = " <span class='badge badge-orange'>ATTRIB BYPASS</span>"
+        }
+        
         $htmlReport += "<tr class='suspicious-row'>
-            <td style='font-family: monospace;'>$($mod.FileName)</td>
+            <td style='font-family: monospace;'>$($mod.FileName)$attributeWarning</td>
             <td>$productName</td>
             <td style='color: var(--danger); font-weight: bold;'>$patternsList</td>
         </tr>"
@@ -1366,38 +1657,7 @@ if ($tamperedMods.Count -gt 0) {
     $htmlReport += "</tbody></table></div>"
 }
 
-# Scan Summary
 $htmlReport += @"
-<div class='section'>
-    <h2>[SUMMARY] Scan Results</h2>
-    <table>
-        <tr>
-            <th>Metric</th>
-            <th>Count</th>
-        </tr>
-        <tr>
-            <td>Total Files Analyzed</td>
-            <td style='font-weight: bold; font-size: 1.2rem;'>$totalMods</td>
-        </tr>
-        <tr>
-            <td>Verified Modules</td>
-            <td style='color: var(--success); font-weight: bold;'>$($verifiedMods.Count)</td>
-        </tr>
-        <tr>
-            <td>Unverified Files</td>
-            <td style='color: var(--warning); font-weight: bold;'>$($unknownMods.Count)</td>
-        </tr>
-        <tr>
-            <td>Signature Matches</td>
-            <td style='color: var(--danger); font-weight: bold;'>$($suspiciousMods.Count)</td>
-        </tr>
-        <tr>
-            <td>Integrity Mismatches</td>
-            <td style='color: var(--magenta); font-weight: bold;'>$($tamperedMods.Count)</td>
-        </tr>
-    </table>
-</div>
-
 <footer class='footer'>
     <p><strong>Valor Mod Analyzer v2.0</strong></p>
     <p>Developed by: DrValor</p>
@@ -1435,11 +1695,10 @@ if ($verifiedMods.Count -gt 0) {
     Write-Host "   " + ("-" * 40) -ForegroundColor DarkGray
     
     foreach ($mod in $verifiedMods) {
-        $isSuspicious = $suspiciousMods.FileName -contains $mod.FileName
         $isTampered = $tamperedMods.FileName -contains $mod.FileName
         
+        # Signature match mods are now just shown as verified (no separate label)
         if ($isTampered) { Write-Host "     [INTEGRITY MISMATCH] " -ForegroundColor Red -NoNewline }
-        elseif ($isSuspicious) { Write-Host "     [SIGNATURE MATCH] " -ForegroundColor Yellow -NoNewline }
         else { Write-Host "     [VERIFIED] " -ForegroundColor Green -NoNewline }
         
         Write-Host "$($mod.ModName)" -ForegroundColor White -NoNewline
@@ -1498,6 +1757,11 @@ if ($suspiciousMods.Count -gt 0) {
     foreach ($mod in $suspiciousMods) {
         Write-Host "     [SUSPICIOUS PATTERN DETECTED]" -ForegroundColor Red
         Write-Host "       File: $($mod.FileName)" -ForegroundColor Yellow
+        
+        # Check for attribute bypass
+        if ($mod.HasAttributeBypass) {
+            Write-Host "       [!] ATTRIB BYPASS DETECTED - Hidden/System attributes" -ForegroundColor Red
+        }
         
         if ($mod.ModName) {
             Write-Host "       Product: $($mod.ModName)" -ForegroundColor Yellow
@@ -1562,22 +1826,6 @@ if ($attributeManipulatedMods.Count -gt 0) {
     Write-Host ""
 }
 
-Write-Host "   [SCAN SUMMARY] ANALYSIS COMPLETE" -ForegroundColor Cyan
-Write-Host "   " + ("=" * 50) -ForegroundColor Blue
-Write-Host "       Total files analyzed: " -ForegroundColor Gray -NoNewline
-Write-Host "$totalMods" -ForegroundColor White
-Write-Host "       Verified modules: " -ForegroundColor Gray -NoNewline
-Write-Host "$($verifiedMods.Count)" -ForegroundColor Green
-Write-Host "       Unverified files: " -ForegroundColor Gray -NoNewline
-Write-Host "$($unknownMods.Count)" -ForegroundColor Yellow
-Write-Host "       Signature matches: " -ForegroundColor Gray -NoNewline
-Write-Host "$($suspiciousMods.Count)" -ForegroundColor Red
-Write-Host "       Integrity mismatches: " -ForegroundColor Gray -NoNewline
-Write-Host "$($tamperedMods.Count)" -ForegroundColor Magenta
-Write-Host "       Hidden/Attrib files: " -ForegroundColor Gray -NoNewline
-Write-Host "$($attributeManipulatedMods.Count)" -ForegroundColor Red
-Write-Host
-Write-Host "   " + ("=" * 50) -ForegroundColor Blue
 Write-Host ""
 Write-Host "   Security scan completed." -ForegroundColor Cyan
 Write-Host ""
