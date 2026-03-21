@@ -59,6 +59,9 @@ Write-Host "   [SYSTEM SCAN] Fabric External Mods Verification" -ForegroundColor
 Write-Host "   --------------------------------------------------------" -ForegroundColor DarkYellow
 Write-Host ""
 
+# Collection to store all external mod JAR files
+$externalModJars = @()
+
 # Find all javaw.exe processes
 $javaProcesses = Get-Process -Name javaw -ErrorAction SilentlyContinue
 $minecraftProcessesInfo = @()
@@ -100,26 +103,57 @@ if ($javaProcesses.Count -eq 0) {
             Write-Host ""
                         
             # Extract the fabric.addMods argument
-            if ($commandLine -match '-Dfabric\.addMods=([^\s]+)') {
-                $fabricAddModsValue = $matches[1]
+            if ($commandLine -match '-Dfabric\.addMods=([^\s"]+)') {
+                $rawPath = $matches[1]
+                
+                # Deep clean the extracted path
+                $fabricAddModsValue = $rawPath.Trim('"', "'").Trim()              # Remove surrounding quotes and whitespace
+                $fabricAddModsValue = $fabricAddModsValue -replace '[\x00-\x1F]', ''  # Remove control chars
+                $fabricAddModsValue = $fabricAddModsValue.Trim()                       # Trim whitespace again
+                $fabricAddModsValue = $fabricAddModsValue -replace '/', '\'            # Normalize slashes
+                $fabricAddModsValue = [Environment]::ExpandEnvironmentVariables($fabricAddModsValue) # Expand env vars
+                
                 Write-Host "-Dfabric.addMods=$fabricAddModsValue" -ForegroundColor Magenta
                     
-                # Check if the path exists and scan it
-                if (Test-Path $fabricAddModsValue) {
-                    Write-Host "   [CRITICAL] External mod directory detected: $fabricAddModsValue" -ForegroundColor Red
-                        
-                    # Scan the external mod directory
-                    try {
-                        $externalMods = Get-ChildItem -Path $fabricAddModsValue -Filter "*.jar" -ErrorAction SilentlyContinue
-                        if ($externalMods) {
-                            Write-Host "   [EXTERNAL MODS] Found $($externalMods.Count) mod(s) in external directory:" -ForegroundColor Yellow
-                            foreach ($extMod in $externalMods) {
-                                Write-Host "      - $($extMod.Name)" -ForegroundColor Yellow
-                            }
-                        }
-                    } catch {}
+                # Debug output for path verification
+                Write-Host "   [DEBUG RAW LENGTH]: $($fabricAddModsValue.Length)" -ForegroundColor Cyan
+                Write-Host "   [DEBUG BYTES]: $([System.Text.Encoding]::UTF8.GetBytes($fabricAddModsValue) -join ' ')" -ForegroundColor Cyan
+                Write-Host "   [DEBUG FINAL PATH]: '$fabricAddModsValue'" -ForegroundColor Cyan
+                    
+                # Validate path exists using LiteralPath to avoid interpretation issues
+                if (-not (Test-Path -LiteralPath $fabricAddModsValue)) {
+                    Write-Host "   [ERROR] Path truly not found or inaccessible: '$fabricAddModsValue'" -ForegroundColor Red
+                    Write-Host "   [DEBUG] Raw extracted: '$rawPath'" -ForegroundColor Yellow
                 } else {
-                    Write-Host "   [WARNING] External mod path does not exist: $fabricAddModsValue" -ForegroundColor Yellow
+                    try {
+                        $item = Get-Item -LiteralPath $fabricAddModsValue -Force -ErrorAction SilentlyContinue
+                        
+                        # Check if it's a single JAR file
+                        if ($item -is [System.IO.FileInfo] -and $item.Extension -eq ".jar") {
+                            # Single JAR file - process directly
+                            $externalModJars += $item.FullName
+                            Write-Host "   [EXTERNAL MOD] Single JAR file: $($item.Name)" -ForegroundColor Green
+                        }
+                        # Check if it's a directory containing mods
+                        elseif ($item -is [System.IO.DirectoryInfo] -or $item.PSIsContainer) {
+                            # Directory containing JARs
+                            Write-Host "   [CRITICAL] External mod directory detected: $fabricAddModsValue" -ForegroundColor Red
+                            $externalMods = Get-ChildItem -LiteralPath $fabricAddModsValue -Filter "*.jar" -Force -ErrorAction SilentlyContinue
+                            if ($externalMods) {
+                                foreach ($extMod in $externalMods) {
+                                    $externalModJars += $extMod.FullName
+                                }
+                                Write-Host "   [EXTERNAL MODS] Found $($externalMods.Count) mod(s) in directory:" -ForegroundColor Yellow
+                                foreach ($extMod in $externalMods) {
+                                    Write-Host "      - $($extMod.Name)" -ForegroundColor Yellow
+                                }
+                            }
+                        } else {
+                            Write-Host "   [WARNING] Unknown path type: $fabricAddModsValue" -ForegroundColor Yellow
+                        }
+                    } catch {
+                        Write-Host "   [ERROR] Failed to process path: $_" -ForegroundColor Red
+                    }
                 }
             }
                         
@@ -181,17 +215,53 @@ if ($javaProcesses.Count -eq 0) {
                         
                     # Check for dangerous arguments in argfile
                     if ($argFileContent -match '-Dfabric\.addMods=([^\r\n]+)') {
-                        $fabricPathFromArgfile = $matches[1]
+                        $rawArgfilePath = $matches[1]
+                        
+                        # Deep clean the extracted path
+                        $fabricPathFromArgfile = $rawArgfilePath.Trim('"', "'").Trim()     # Remove surrounding quotes and whitespace
+                        $fabricPathFromArgfile = $fabricPathFromArgfile -replace '[\x00-\x1F]', '' # Remove control chars
+                        $fabricPathFromArgfile = $fabricPathFromArgfile.Trim()                      # Trim whitespace
+                        $fabricPathFromArgfile = $fabricPathFromArgfile -replace '/' , '\'          # Normalize slashes
+                        $fabricPathFromArgfile = [Environment]::ExpandEnvironmentVariables($fabricPathFromArgfile) # Expand env vars
+                        
+                        Write-Host "   [DEBUG RAW LENGTH]: $($fabricPathFromArgfile.Length)" -ForegroundColor Cyan
+                        Write-Host "   [DEBUG BYTES]: $([System.Text.Encoding]::UTF8.GetBytes($fabricPathFromArgfile) -join ' ')" -ForegroundColor Cyan
+                        Write-Host "   [DEBUG FINAL PATH]: '$fabricPathFromArgfile'" -ForegroundColor Cyan
                         Write-Host "   [CRITICAL] Argfile contains external mod loading: -Dfabric.addMods=$fabricPathFromArgfile" -ForegroundColor Red
                             
-                        if (Test-Path $fabricPathFromArgfile) {
-                            Write-Host "   [CRITICAL] External mod directory from argfile: $fabricPathFromArgfile" -ForegroundColor Red
-                            $externalMods = Get-ChildItem -Path $fabricPathFromArgfile -Filter "*.jar" -ErrorAction SilentlyContinue
-                            if ($externalMods) {
-                                Write-Host "   [EXTERNAL MODS] Found $($externalMods.Count) mod(s):" -ForegroundColor Yellow
-                                foreach ($extMod in $externalMods) {
-                                    Write-Host "      - $($extMod.Name)" -ForegroundColor Yellow
+                        # Validate path exists using LiteralPath
+                        if (-not (Test-Path -LiteralPath $fabricPathFromArgfile)) {
+                            Write-Host "   [ERROR] Path from argfile truly not found: '$fabricPathFromArgfile'" -ForegroundColor Red
+                            Write-Host "   [DEBUG] Raw extracted: '$rawArgfilePath'" -ForegroundColor Yellow
+                        } else {
+                            try {
+                                $item = Get-Item -LiteralPath $fabricPathFromArgfile -Force -ErrorAction SilentlyContinue
+                                
+                                # Check if it's a single JAR file
+                                if ($item -is [System.IO.FileInfo] -and $item.Extension -eq ".jar") {
+                                    # Single JAR file - process directly
+                                    $externalModJars += $item.FullName
+                                    Write-Host "   [EXTERNAL MOD] Single JAR from argfile: $($item.Name)" -ForegroundColor Green
                                 }
+                                # Check if it's a directory containing mods
+                                elseif ($item -is [System.IO.DirectoryInfo] -or $item.PSIsContainer) {
+                                    # Directory containing JARs
+                                    Write-Host "   [CRITICAL] External mod directory from argfile: $fabricPathFromArgfile" -ForegroundColor Red
+                                    $externalMods = Get-ChildItem -LiteralPath $fabricPathFromArgfile -Filter "*.jar" -Force -ErrorAction SilentlyContinue
+                                    if ($externalMods) {
+                                        foreach ($extMod in $externalMods) {
+                                            $externalModJars += $extMod.FullName
+                                        }
+                                        Write-Host "   [EXTERNAL MODS] Found $($externalMods.Count) mod(s):" -ForegroundColor Yellow
+                                        foreach ($extMod in $externalMods) {
+                                            Write-Host "      - $($extMod.Name)" -ForegroundColor Yellow
+                                        }
+                                    }
+                                } else {
+                                    Write-Host "   [WARNING] Unknown path type from argfile: $fabricPathFromArgfile" -ForegroundColor Yellow
+                                }
+                            } catch {
+                                Write-Host "   [ERROR] Failed to process argfile path: $_" -ForegroundColor Red
                             }
                         }
                     }
@@ -217,6 +287,13 @@ if ($javaProcesses.Count -eq 0) {
         Write-Host "   [STATUS] No unauthorized external mod loading detected" -ForegroundColor Green
         Write-Host ""
     }
+}
+
+# Remove duplicates from external mod JARs
+if ($externalModJars.Count -gt 0) {
+    $externalModJars = $externalModJars | Select-Object -Unique
+    Write-Host "   [INFO] Total external JARs collected: $($externalModJars.Count)" -ForegroundColor Cyan
+    Write-Host ""
 }
 
 # ==================== File Attribute Manipulation Detector ====================
@@ -756,8 +833,27 @@ function Check-Strings($filePath) {
 $verifiedMods = @(); $unknownMods = @(); $suspiciousMods = @(); $sizeMismatchMods = @(); $tamperedMods = @(); $allModsInfo = @()
 $attributeManipulatedMods = @()
 
-# Process all mods
-$jarFiles = Get-ChildItem -Path $mods -Filter *.jar
+# Process all mods - combine main mods folder with external JARs
+$jarFiles = Get-ChildItem -Path $mods -Filter *.jar -Force
+
+# Add external mod JARs (excluding duplicates already in main mods folder)
+if ($externalModJars.Count -gt 0) {
+    $mainModPaths = $jarFiles | ForEach-Object { $_.FullName }
+    foreach ($extJar in $externalModJars) {
+        # Skip if already in main mods folder
+        if ($extJar -notin $mainModPaths) {
+            try {
+                $jarFile = Get-Item $extJar -Force -ErrorAction SilentlyContinue
+                if ($jarFile) {
+                    $jarFiles += $jarFile
+                }
+            } catch {
+                Write-Host "   [WARNING] Could not access external JAR: $extJar" -ForegroundColor Yellow
+            }
+        }
+    }
+}
+
 $totalMods = $jarFiles.Count
 
 if ($jarFiles.Count -eq 0) {
@@ -768,6 +864,9 @@ if ($jarFiles.Count -eq 0) {
 }
 
 Write-Host "   [SYSTEM] Discovered $($jarFiles.Count) executable module(s) for analysis" -ForegroundColor Green
+if ($externalModJars.Count -gt 0) {
+    Write-Host "   [SYSTEM] Including $($externalModJars.Count) external mod(s) from Fabric loading" -ForegroundColor Cyan
+}
 Write-Host
 
 # Process all mods
@@ -1223,7 +1322,7 @@ if ($externalModDirectories.Count -gt 0) {
         }
         
         try {
-            $externalMods = Get-ChildItem -Path $modDir -Filter "*.jar" -ErrorAction SilentlyContinue
+            $externalMods = Get-ChildItem -Path $modDir -Filter "*.jar" -Force -ErrorAction SilentlyContinue
             if ($externalMods) {
                 $htmlReport += "<div style='margin-bottom: 20px; padding: 15px; background: #fff3cd; border-left: 4px solid #ffc107;'>"
                 $htmlReport += "<p style='font-family: monospace; font-weight: bold; margin-bottom: 10px;'>Directory: $modDir</p>"
@@ -1235,52 +1334,8 @@ if ($externalModDirectories.Count -gt 0) {
                 $htmlReport += "</ul>"
                 $htmlReport += "</div>"
                 
-                # Add these mods to the scan queue
-                foreach ($extMod in $externalMods) {
-                    # Check if this mod is already in our list
-                    $exists = $false
-                    foreach ($existingMod in $allModsInfo) {
-                        if ($existingMod.FileName -eq $extMod.Name) {
-                            $exists = $true
-                            break
-                        }
-                    }
-                    
-                    if (-not $exists) {
-                        try {
-                            # Try to read file details - might fail for protected locations
-                            $fileInfo = Get-Item $extMod.FullName -ErrorAction Stop
-                            
-                            # Add external mod to analysis
-                            $modEntry = [PSCustomObject]@{
-                                FileName = $extMod.Name
-                                FilePath = $extMod.FullName
-                                FileSize = $fileInfo.Length
-                                LastModified = $fileInfo.LastWriteTime
-                                ModName = "Unknown"
-                                Version = "Unknown"
-                                Author = "Unknown"
-                                Description = ""
-                                IsVerified = $false
-                                IsSuspicious = $false
-                                IsTampered = $false
-                                IsUnknown = $true
-                                MatchType = ""
-                                LoaderType = "Unknown"
-                                DownloadSource = "Unknown"
-                                IsModrinthDownload = $false
-                                HashMatches = $false
-                                SignatureMatch = $false
-                                PatternsFound = @()
-                                Reason = "External mod loaded via JVM argument from: $modDir"
-                            }
-                            $unknownMods += $modEntry
-                            $allModsInfo += $modEntry
-                        } catch {
-                            Write-Host "   [WARNING] Cannot access external mod file: $($extMod.Name) - Access denied or file locked" -ForegroundColor Yellow
-                        }
-                    }
-                }
+                # NOTE: External mods are already integrated into main scanning pipeline above
+                # They will appear in the regular scan results with full analysis
             } else {
                 $htmlReport += "<div style='margin-bottom: 20px; padding: 15px; background: #fff3cd; border-left: 4px solid #ffc107;'>"
                 $htmlReport += "<p style='font-family: monospace; font-weight: bold;'>Directory: $modDir</p>"
@@ -1296,7 +1351,7 @@ if ($externalModDirectories.Count -gt 0) {
     }
     
     $htmlReport += "<p style='margin-top: 15px; padding: 10px; background: #fff3cd; border-left: 4px solid #ffc107;'>
-        <strong>INFO:</strong> External mods will be scanned and categorized below based on verification results.
+        <strong>INFO:</strong> External mods listed above have been fully scanned and will appear in the analysis results below.
     </p>
     </div>"
 }
@@ -1471,11 +1526,6 @@ if ($attributeManipulatedMods.Count -gt 0) {
     }
     
     $htmlReport += "</tbody></table>
-    <p style='margin-top: 15px; padding: 10px; background: #fff3cd; border-left: 4px solid #e67e22;'>
-        <strong>WARNING: ATTRIB BYPASS DETECTED:</strong> These files have hidden and/or system attributes set.<br>
-        This is commonly done using <code>attrib +h +s filename</code> to conceal cheat clients from casual inspection.<br>
-        <strong>Remediation:</strong> Run <code>attrib -h -s `'filepath`'</code> to reveal and delete these files.
-    </p>
     </div>"
 }
 
@@ -1746,6 +1796,20 @@ if ($unknownMods.Count -gt 0) {
         Write-Host "     [VERIFICATION SOURCE UNAVAILABLE] $name" -ForegroundColor Yellow
         $sourceText = if ($mod.DownloadSource) { "        Source Origin: $($mod.DownloadSource)" } else { "        Source Origin: Unknown" }
         Write-Host $sourceText -ForegroundColor DarkYellow
+        
+        # Show file size and mod info if available
+        if ($mod.FileSizeKB) {
+            Write-Host "        File Size: $($mod.FileSizeKB) KB" -ForegroundColor DarkGray
+        }
+        if ($mod.ModName -and $mod.ModName -ne "Unknown") {
+            Write-Host "        Mod Name: $($mod.ModName)" -ForegroundColor DarkGray
+        }
+        if ($mod.Version -and $mod.Version -ne "Unknown") {
+            Write-Host "        Version: $($mod.Version)" -ForegroundColor DarkGray
+        }
+        if ($mod.LoaderType -and $mod.LoaderType -ne "Unknown") {
+            Write-Host "        Loader: $($mod.LoaderType)" -ForegroundColor DarkGray
+        }
         Write-Host ""
     }
 }
