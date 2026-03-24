@@ -5,6 +5,42 @@
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
+# ASCII Art Banner
+$asciiArt = @"
+ _                _ 
+   \ \              / / 
+    \ \            / / 
+     \ \          / / 
+      \ \        / / 
+       \ \______/ / 
+       /          \ 
+      /   _    _   \ 
+     |   (.)  (.)   | 
+     |      /\      | 
+      \    '--'    / 
+       '----------'
+"@
+
+# Display ASCII art with gradient colors
+$gradientColors = @("White", "Cyan", "DarkCyan", "Blue", "DarkBlue")
+
+$lines = $asciiArt.Split([System.Environment]::NewLine)
+foreach ($line in $lines) {
+    # Render the line character by character with a gradient
+    if ($line.Trim().Length -gt 0) {
+        $colorStep = $line.Length / $gradientColors.Count
+        for ($i = 0; $i -lt $line.Length; $i++) {
+            $char = $line[$i]
+            $colorIndex = [math]::Min([math]::Floor($i / $colorStep), $gradientColors.Count - 1)
+            $charColor = $gradientColors[$colorIndex]
+            Write-Host -NoNewline $char -ForegroundColor $charColor
+        }
+    }
+    Write-Host
+}
+
+Write-Host
+
 # Get mods folder path
 $mods = Read-Host "Enter path to the mods folder"
 Write-Host
