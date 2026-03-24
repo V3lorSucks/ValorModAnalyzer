@@ -1,6 +1,6 @@
-# Valor Combined Mod Analyzer - PowerShell Script
+# Valor Mod Analyzer - PowerShell Script
 # Developed by: DrValor
-# Based on work by: Hadron, TonyNoh, YarpLetapStan
+# Inspiration by: Hadron
 # Scans Minecraft mods for suspicious patterns and verifies against known databases
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
