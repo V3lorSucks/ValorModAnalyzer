@@ -4,76 +4,40 @@
 # Scans Minecraft mods for suspicious patterns and verifies against known databases
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-Clear-Host
-
-Write-Host "===========================================" -ForegroundColor Cyan
-Write-Host "Valor Mod Analyzer v2.0" -ForegroundColor Cyan
-Write-Host "Security Assessment Tool" -ForegroundColor Cyan
-Write-Host "===========================================" -ForegroundColor Cyan
-Write-Host ""
-Write-Host "Developed by: DrValor" -ForegroundColor Gray
-Write-Host "Based on work by: Hadron, TonyNoh, YarpLetapStan" -ForegroundColor DarkGray
-Write-Host ""
 
 # Get mods folder path
-Write-Host "Enter path to the mods folder: " -NoNewline
-Write-Host "(press Enter to use default)" -ForegroundColor DarkGray
-$mods = Read-Host "PATH"
+$mods = Read-Host "Enter path to the mods folder"
 Write-Host
 
 if (-not $mods) {
     $mods = "$env:USERPROFILE\AppData\Roaming\.minecraft\mods"
-    Write-Host "Continuing with $mods`n" -ForegroundColor White
 }
 
 if (-not (Test-Path $mods -PathType Container)) {
-    Write-Host "[ERROR] Invalid Path!" -ForegroundColor Red
-    Write-Host "The directory does not exist or is not accessible." -ForegroundColor Yellow
-    Write-Host
-    Write-Host "Tried to access: $mods" -ForegroundColor Gray
-    Write-Host
-    Write-Host "Press any key to exit..." -ForegroundColor Gray
-    $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+    Write-Host "Invalid path: $mods" -ForegroundColor Red
     exit 1
 }
 
-Write-Host "   [SYSTEM] Initiating security scan: $mods" -ForegroundColor Green
-Write-Host
 
-# Check Minecraft uptime
+# Check Minecraft uptime (silent for HTML report)
 $process = Get-Process javaw -ErrorAction SilentlyContinue
 if (-not $process) { $process = Get-Process java -ErrorAction SilentlyContinue }
 
 if ($process) {
     try {
         $elapsedTime = (Get-Date) - $process.StartTime
-        Write-Host "[PROCESS INFO] Minecraft Uptime" -ForegroundColor DarkCyan
-        Write-Host "   $($process.Name) PID $($process.Id) started at $($process.StartTime)" -ForegroundColor Gray
-        Write-Host "   Running for: $($elapsedTime.Hours)h $($elapsedTime.Minutes)m $($elapsedTime.Seconds)s" -ForegroundColor Gray
-        Write-Host ""
+        # Store for HTML report only
     } catch {}
 }
 
 # ==================== Fabric AddMods Detector ====================
-Write-Host "   [SYSTEM SCAN] Fabric External Mods Verification" -ForegroundColor Yellow
-Write-Host "   --------------------------------------------------------" -ForegroundColor DarkYellow
-Write-Host ""
-
-# Collection to store all external mod JAR files
-$externalModJars = @()
-
 # Find all javaw.exe processes
 $javaProcesses = Get-Process -Name javaw -ErrorAction SilentlyContinue
 $minecraftProcessesInfo = @()
 
 if ($javaProcesses.Count -eq 0) {
-    Write-Host "No javaw.exe processes found." -ForegroundColor Yellow
-    Write-Host "Make sure Minecraft is running." -ForegroundColor Yellow
-    Write-Host ""
+    # No output, just continue
 } else {
-    Write-Host "Scanning $($javaProcesses.Count) Java process(es)..." -ForegroundColor White
-    Write-Host ""
-
     $foundFabricAddMods = $false
 
     foreach ($proc in $javaProcesses) {
@@ -97,11 +61,6 @@ if ($javaProcesses.Count -eq 0) {
         if ($commandLine -match '-Dfabric\.addMods') {
             $foundFabricAddMods = $true
                         
-            Write-Host "   [WARNING] External Fabric mod loading detected" -ForegroundColor Yellow
-            Write-Host "   Process ID: $($proc.Id)" -ForegroundColor Yellow
-            Write-Host "   Status: External mod loading active" -ForegroundColor Yellow
-            Write-Host ""
-                        
             # Extract the fabric.addMods argument
             if ($commandLine -match '-Dfabric\.addMods=([^\s"]+)') {
                 $rawPath = $matches[1]
@@ -113,17 +72,11 @@ if ($javaProcesses.Count -eq 0) {
                 $fabricAddModsValue = $fabricAddModsValue -replace '/', '\'            # Normalize slashes
                 $fabricAddModsValue = [Environment]::ExpandEnvironmentVariables($fabricAddModsValue) # Expand env vars
                 
-                Write-Host "-Dfabric.addMods=$fabricAddModsValue" -ForegroundColor Magenta
-                    
-                # Debug output for path verification
-                Write-Host "   [DEBUG RAW LENGTH]: $($fabricAddModsValue.Length)" -ForegroundColor Cyan
-                Write-Host "   [DEBUG BYTES]: $([System.Text.Encoding]::UTF8.GetBytes($fabricAddModsValue) -join ' ')" -ForegroundColor Cyan
-                Write-Host "   [DEBUG FINAL PATH]: '$fabricAddModsValue'" -ForegroundColor Cyan
+                # Silent - no console output
                     
                 # Validate path exists using LiteralPath to avoid interpretation issues
                 if (-not (Test-Path -LiteralPath $fabricAddModsValue)) {
-                    Write-Host "   [ERROR] Path truly not found or inaccessible: '$fabricAddModsValue'" -ForegroundColor Red
-                    Write-Host "   [DEBUG] Raw extracted: '$rawPath'" -ForegroundColor Yellow
+                    # Silent - store for HTML report only
                 } else {
                     try {
                         $item = Get-Item -LiteralPath $fabricAddModsValue -Force -ErrorAction SilentlyContinue
@@ -132,39 +85,31 @@ if ($javaProcesses.Count -eq 0) {
                         if ($item -is [System.IO.FileInfo] -and $item.Extension -eq ".jar") {
                             # Single JAR file - process directly
                             $externalModJars += $item.FullName
-                            Write-Host "   [EXTERNAL MOD] Single JAR file: $($item.Name)" -ForegroundColor Green
                         }
                         # Check if it's a directory containing mods
                         elseif ($item -is [System.IO.DirectoryInfo] -or $item.PSIsContainer) {
                             # Directory containing JARs
-                            Write-Host "   [CRITICAL] External mod directory detected: $fabricAddModsValue" -ForegroundColor Red
                             $externalMods = Get-ChildItem -LiteralPath $fabricAddModsValue -Filter "*.jar" -Force -ErrorAction SilentlyContinue
                             if ($externalMods) {
                                 foreach ($extMod in $externalMods) {
                                     $externalModJars += $extMod.FullName
                                 }
-                                Write-Host "   [EXTERNAL MODS] Found $($externalMods.Count) mod(s) in directory:" -ForegroundColor Yellow
-                                foreach ($extMod in $externalMods) {
-                                    Write-Host "      - $($extMod.Name)" -ForegroundColor Yellow
-                                }
                             }
-                        } else {
-                            Write-Host "   [WARNING] Unknown path type: $fabricAddModsValue" -ForegroundColor Yellow
                         }
                     } catch {
-                        Write-Host "   [ERROR] Failed to process path: $_" -ForegroundColor Red
+                        # Silent error handling
                     }
                 }
             }
-                        
-            Write-Host ""
-            Write-Host "   [INFO] Additional mods loaded outside standard directory" -ForegroundColor Yellow
-            Write-Host ""
         }
             
         # Check for javaagent arguments
         if ($commandLine -match '-javaagent:([^\s]+)') {
             $javaAgentPath = $matches[1]
+                    
+            # Update process info
+            $processInfo.HasJavaAgent = $true
+            $processInfo.JavaAgentPath = $javaAgentPath
                     
             # Check if this is a known legitimate launcher agent
             $isLegitimateAgent = $false
@@ -177,18 +122,13 @@ if ($javaProcesses.Count -eq 0) {
             foreach ($pattern in $legitimateAgentPatterns) {
                 if ($javaAgentPath -match $pattern) {
                     $isLegitimateAgent = $true
-                    Write-Host "   [INFO] Legitimate launcher agent detected: $javaAgentPath" -ForegroundColor Cyan
-                    Write-Host "   Status: Known launcher component (not flagged)" -ForegroundColor Green
+                    $processInfo.IsLegitimateAgent = $true
+                    $processInfo.LegitimateAgentPath = $javaAgentPath
                     break
                 }
             }
                     
             if (-not $isLegitimateAgent) {
-                Write-Host "   [CRITICAL] Java Agent detected!" -ForegroundColor Red
-                Write-Host "   Process ID: $($proc.Id)" -ForegroundColor Red
-                Write-Host "   Agent Path: $javaAgentPath" -ForegroundColor Magenta
-                Write-Host "   [WARNING] Java agents can inject arbitrary code and bypass security checks" -ForegroundColor Red
-                Write-Host ""
                         
                 # Add javaagent info to process object only for suspicious agents
                 $processInfo.HasJavaAgent = $true
@@ -202,16 +142,13 @@ if ($javaProcesses.Count -eq 0) {
             }
         }
             
-        # Check for argfile references and scan their contents
+        # Check for argfile references and scan their contents (silent)
         if ($commandLine -match '@([\w]:\\[^\s]+\.txt|/[^\s]+\.txt)') {
             $argFilePath = $matches[1]
-            Write-Host "   [INFO] Argfile reference detected: $argFilePath" -ForegroundColor Cyan
                 
             if (Test-Path $argFilePath) {
                 try {
                     $argFileContent = Get-Content -Path $argFilePath -Raw -ErrorAction SilentlyContinue
-                    Write-Host "   [ARGFILE CONTENT] Reading: $argFilePath" -ForegroundColor Cyan
-                    Write-Host "   $argFileContent" -ForegroundColor DarkGray
                         
                     # Check for dangerous arguments in argfile
                     if ($argFileContent -match '-Dfabric\.addMods=([^\r\n]+)') {
@@ -223,16 +160,10 @@ if ($javaProcesses.Count -eq 0) {
                         $fabricPathFromArgfile = $fabricPathFromArgfile.Trim()                      # Trim whitespace
                         $fabricPathFromArgfile = $fabricPathFromArgfile -replace '/' , '\'          # Normalize slashes
                         $fabricPathFromArgfile = [Environment]::ExpandEnvironmentVariables($fabricPathFromArgfile) # Expand env vars
-                        
-                        Write-Host "   [DEBUG RAW LENGTH]: $($fabricPathFromArgfile.Length)" -ForegroundColor Cyan
-                        Write-Host "   [DEBUG BYTES]: $([System.Text.Encoding]::UTF8.GetBytes($fabricPathFromArgfile) -join ' ')" -ForegroundColor Cyan
-                        Write-Host "   [DEBUG FINAL PATH]: '$fabricPathFromArgfile'" -ForegroundColor Cyan
-                        Write-Host "   [CRITICAL] Argfile contains external mod loading: -Dfabric.addMods=$fabricPathFromArgfile" -ForegroundColor Red
                             
                         # Validate path exists using LiteralPath
                         if (-not (Test-Path -LiteralPath $fabricPathFromArgfile)) {
-                            Write-Host "   [ERROR] Path from argfile truly not found: '$fabricPathFromArgfile'" -ForegroundColor Red
-                            Write-Host "   [DEBUG] Raw extracted: '$rawArgfilePath'" -ForegroundColor Yellow
+                            # Silent
                         } else {
                             try {
                                 $item = Get-Item -LiteralPath $fabricPathFromArgfile -Force -ErrorAction SilentlyContinue
@@ -241,65 +172,47 @@ if ($javaProcesses.Count -eq 0) {
                                 if ($item -is [System.IO.FileInfo] -and $item.Extension -eq ".jar") {
                                     # Single JAR file - process directly
                                     $externalModJars += $item.FullName
-                                    Write-Host "   [EXTERNAL MOD] Single JAR from argfile: $($item.Name)" -ForegroundColor Green
                                 }
                                 # Check if it's a directory containing mods
                                 elseif ($item -is [System.IO.DirectoryInfo] -or $item.PSIsContainer) {
                                     # Directory containing JARs
-                                    Write-Host "   [CRITICAL] External mod directory from argfile: $fabricPathFromArgfile" -ForegroundColor Red
                                     $externalMods = Get-ChildItem -LiteralPath $fabricPathFromArgfile -Filter "*.jar" -Force -ErrorAction SilentlyContinue
                                     if ($externalMods) {
                                         foreach ($extMod in $externalMods) {
                                             $externalModJars += $extMod.FullName
                                         }
-                                        Write-Host "   [EXTERNAL MODS] Found $($externalMods.Count) mod(s):" -ForegroundColor Yellow
-                                        foreach ($extMod in $externalMods) {
-                                            Write-Host "      - $($extMod.Name)" -ForegroundColor Yellow
-                                        }
                                     }
-                                } else {
-                                    Write-Host "   [WARNING] Unknown path type from argfile: $fabricPathFromArgfile" -ForegroundColor Yellow
                                 }
                             } catch {
-                                Write-Host "   [ERROR] Failed to process argfile path: $_" -ForegroundColor Red
+                                # Silent error
                             }
                         }
                     }
                         
-                    # Check for javaagent in argfile
+                    # Check for javaagent in argfile (silent)
                     if ($argFileContent -match '-javaagent:([^\r\n]+)') {
                         $javaAgentFromArgfile = $matches[1]
-                        Write-Host "   [CRITICAL] Argfile contains Java Agent: -javaagent:$javaAgentFromArgfile" -ForegroundColor Red
-                        Write-Host "   [WARNING] This can bypass security checks" -ForegroundColor Red
                     }
                         
                 } catch {
-                    Write-Host "   [ERROR] Failed to read argfile: $_" -ForegroundColor Red
+                    # Silent error
                 }
             } else {
-                Write-Host "   [WARNING] Argfile not found: $argFilePath" -ForegroundColor Yellow
+                # Silent - argfile not found
             }
-            Write-Host ""
         }
     }
 
-    if (-not $foundFabricAddMods) {
-        Write-Host "   [STATUS] No unauthorized external mod loading detected" -ForegroundColor Green
-        Write-Host ""
-    }
+    # No console output
 }
 
-# Remove duplicates from external mod JARs
+# Remove duplicates from external mod JARs (silent)
 if ($externalModJars.Count -gt 0) {
     $externalModJars = $externalModJars | Select-Object -Unique
-    Write-Host "   [INFO] Total external JARs collected: $($externalModJars.Count)" -ForegroundColor Cyan
-    Write-Host ""
 }
 
 # ==================== File Attribute Manipulation Detector ====================
-Write-Host "   [SYSTEM SCAN] File Attribute Manipulation Detection" -ForegroundColor Yellow
-Write-Host "   --------------------------------------------------------" -ForegroundColor DarkYellow
-Write-Host ""
+# Silent scan for HTML report
 
 $attributeBypassDetected = $false
 $suspiciousAttributeFiles = @()
@@ -339,40 +252,12 @@ try {
         }
     }
     
-    if ($attributeBypassDetected) {
-        Write-Host "   [WARNING] File attribute manipulation detected!" -ForegroundColor Red
-        Write-Host "   Files with hidden/system attributes found:" -ForegroundColor Yellow
-        Write-Host ""
-        
-        foreach ($suspiciousFile in $suspiciousAttributeFiles) {
-            $attrFlags = @()
-            if ($suspiciousFile.IsHidden) { $attrFlags += "HIDDEN" }
-            if ($suspiciousFile.IsSystem) { $attrFlags += "SYSTEM" }
-            if ($suspiciousFile.IsReadOnly) { $attrFlags += "READONLY" }
-            
-            Write-Host "   [$($attrFlags -join ', ')] $($suspiciousFile.FileName)" -ForegroundColor Red
-            Write-Host "      Path: $($suspiciousFile.FilePath)" -ForegroundColor Gray
-            Write-Host "      Type: $($suspiciousFile.Extension) file" -ForegroundColor Gray
-            Write-Host ""
-        }
-        
-        Write-Host "   [INFO] These files may be using 'attrib -h/+h' for concealment" -ForegroundColor Yellow
-        Write-Host "   [INFO] Common bypass: attrib +h +s <file> to hide from Explorer" -ForegroundColor DarkYellow
-        Write-Host ""
-    } else {
-        Write-Host "   [STATUS] No file attribute manipulation detected" -ForegroundColor Green
-        Write-Host ""
-    }
+    # No console output - results in HTML only
 } catch {
-    Write-Host "   [ERROR] Failed to scan file attributes: $_" -ForegroundColor Red
-    Write-Host ""
+    # Silent error
 }
 
-# Check for Prefetch file manipulation (common attrib bypass target)
-Write-Host "   [SYSTEM SCAN] Prefetch File Protection Check" -ForegroundColor Yellow
-Write-Host "   --------------------------------------------------------" -ForegroundColor DarkYellow
-Write-Host ""
-
+# Check for Prefetch file manipulation (silent)
 $prefetchDir = "$env:SystemRoot\Prefetch"
 $protectedPrefetchFound = $false
 
@@ -385,29 +270,12 @@ if (Test-Path $prefetchDir) {
                 ($pf.Attributes -band [System.IO.FileAttributes]::Hidden) -or
                 ($pf.Attributes -band [System.IO.FileAttributes]::System)) {
                 
-                if (-not $protectedPrefetchFound) {
-                    Write-Host "   [WARNING] Protected/hidden Prefetch files detected!" -ForegroundColor Red
-                    Write-Host "   This may indicate 'attrib +r +h' protection" -ForegroundColor Yellow
-                    Write-Host ""
-                    $protectedPrefetchFound = $true
-                }
-                
-                Write-Host "   [PROTECTED] $($pf.Name)" -ForegroundColor Magenta
-                Write-Host "      Attributes: $($pf.Attributes)" -ForegroundColor Gray
+                $protectedPrefetchFound = $true
             }
         }
-        
-        if (-not $protectedPrefetchFound) {
-            Write-Host "   [STATUS] No protected Prefetch files detected" -ForegroundColor Green
-            Write-Host ""
-        }
     } catch {
-        Write-Host "   [INFO] Could not access Prefetch directory" -ForegroundColor DarkGray
-        Write-Host ""
+        # Silent error
     }
-} else {
-    Write-Host "   [INFO] Prefetch directory not accessible" -ForegroundColor DarkGray
-    Write-Host ""
 }
 
 function Get-SHA1($filePath) { return (Get-FileHash -Path $filePath -Algorithm SHA1).Hash }
@@ -848,7 +716,7 @@ if ($externalModJars.Count -gt 0) {
                     $jarFiles += $jarFile
                 }
             } catch {
-                Write-Host "   [WARNING] Could not access external JAR: $extJar" -ForegroundColor Yellow
+                # Silent error
             }
         }
     }
@@ -857,22 +725,17 @@ if ($externalModJars.Count -gt 0) {
 $totalMods = $jarFiles.Count
 
 if ($jarFiles.Count -eq 0) {
-    Write-Host "   [ERROR] No executable modules found in: $mods" -ForegroundColor Yellow
-    Write-Host "Press any key to exit..." -ForegroundColor Gray
-    $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+    Write-Host "No modules found in: $mods" -ForegroundColor Red
     exit 0
 }
 
-Write-Host "   [SYSTEM] Discovered $($jarFiles.Count) executable module(s) for analysis" -ForegroundColor Green
-if ($externalModJars.Count -gt 0) {
-    Write-Host "   [SYSTEM] Including $($externalModJars.Count) external mod(s) from Fabric loading" -ForegroundColor Cyan
-}
-Write-Host
 
 # Process all mods
 for ($i = 0; $i -lt $jarFiles.Count; $i++) {
     $file = $jarFiles[$i]
-    Write-Host "`r   [ANALYZING] Module Scan: $($i+1) / $totalMods - $($file.Name)" -ForegroundColor Yellow -NoNewline
+    # Simple progress indicator
+    $percent = [math]::Round((($i + 1) / $totalMods) * 100)
+    Write-Host "`r[$percent%]" -NoNewline
     
     # Check for attribute manipulation on mod files
     $hasHiddenAttr = $file.Attributes -band [System.IO.FileAttributes]::Hidden
@@ -990,8 +853,6 @@ for ($i = 0; $i -lt $unknownMods.Count; $i++) {
 
 # Deep pattern scan on unknown mods (including those with attribute manipulation)
 if ($unknownMods.Count -gt 0) {
-    Write-Host "   [DEEP_ANALYSIS] Examining $($unknownMods.Count) unverified module(s) for threat signatures..." -ForegroundColor Cyan
-    
     $idx = 0
     
     try {
@@ -1002,7 +863,9 @@ if ($unknownMods.Count -gt 0) {
         
         foreach ($mod in $unknownMods) {
             $idx++
-            Write-Host "`r   [DEEP_SCAN] Pattern Recognition: $idx/$($unknownMods.Count) - $($mod.FileName)" -ForegroundColor Yellow -NoNewline
+            # Simple progress for deep scan
+            $deepPercent = [math]::Round(($idx / $unknownMods.Count) * 100)
+            Write-Host "`r[$deepPercent%]" -NoNewline
             
             $detected = [System.Collections.Generic.HashSet[string]]::new()
             
@@ -1048,18 +911,19 @@ if ($unknownMods.Count -gt 0) {
             }
         }
     } catch {
-        Write-Host "`r   [ERROR] During deep analysis: $($_.Exception.Message)" -ForegroundColor Red
+        # Silent error during deep analysis
     }
     
     Write-Host "`r$(' ' * 120)`r" -NoNewline
 }
 
 # Also scan verified mods for suspicious patterns (including those with attribute manipulation)
-Write-Host "   [PATTERN_SCAN] Inspecting verified modules for malicious signatures..." -ForegroundColor Cyan
 $counter = 0
 foreach ($mod in $allModsInfo) {
     $counter++
-    Write-Host "`r   [PATTERN_SCAN] Signature Verification: $counter / $($allModsInfo.Count) - $($mod.FileName)" -ForegroundColor Yellow -NoNewline
+    # Simple progress indicator
+    $patternPercent = [math]::Round(($counter / $allModsInfo.Count) * 100)
+    Write-Host "`r[$patternPercent%]" -NoNewline
     
     # Check for attribute manipulation flag
     $hasAttributeBypass = ($mod.HasHiddenAttr -or $mod.HasSystemAttr)
@@ -1082,11 +946,7 @@ foreach ($mod in $allModsInfo) {
     }
 }
 
-Write-Host "`r$(' ' * 120)`r" -NoNewline
-
-# Generate HTML Report
-Write-Host ""
-Write-Host "[REPORT] Generating HTML Report..." -ForegroundColor Yellow
+# Generate HTML Report (silent)
 
 $OutputPath = "$env:USERPROFILE\Desktop\ValorModAnalysisReport.html"
 
@@ -1244,9 +1104,7 @@ $htmlReport = @"
 <body>
     <div class="container">
         <header class="header">
-            <h1>[REPORT] Valor Mod Analyzer Results</h1>
-            <p>Security Assessment Results</p>
-            <p>Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')</p>
+            <h1>Valor Mod Analyzer</h1>
         </header>
 "@
 
@@ -1711,8 +1569,7 @@ $htmlReport += @"
 <footer class='footer'>
     <p><strong>Valor Mod Analyzer v2.0</strong></p>
     <p>Developed by: DrValor</p>
-    <p>Based on work by: Hadron, TonyNoh, YarpLetapStan</p>
-    <p>Report Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')</p>
+    <p>Inspired by: Hadron</p>
 </footer>
 </div>
 </body>
@@ -1721,182 +1578,14 @@ $htmlReport += @"
 
 try {
     $htmlReport | Out-File -FilePath $OutputPath -Encoding UTF8 -Force
-    Write-Host "  Report saved successfully" -ForegroundColor Green
 } catch {
-    Write-Host "  Error saving report: $_" -ForegroundColor Red
+    # Silent error
 }
-
-Write-Host ""
-Write-Host "Opening report in browser..." -ForegroundColor Yellow
 
 try {
     Start-Process $OutputPath
 } catch {
-    Write-Host "Could not open browser automatically. Please open the report manually." -ForegroundColor Yellow
+    # Silently fail
 }
 
-# Results output
-Write-Host "`n" + ("=" * 50) -ForegroundColor Cyan
-Write-Host "=== Verification Results ===" -ForegroundColor Cyan
-Write-Host ("=" * 50) -ForegroundColor Cyan
-
-if ($verifiedMods.Count -gt 0) {
-    Write-Host "   VERIFIED MODS ($($verifiedMods.Count))" -ForegroundColor Green
-    Write-Host "   " + ("-" * 40) -ForegroundColor DarkGray
-    
-    foreach ($mod in $verifiedMods) {
-        $isTampered = $tamperedMods.FileName -contains $mod.FileName
-        
-        # Signature match mods are now just shown as verified (no separate label)
-        if ($isTampered) { Write-Host "     [INTEGRITY MISMATCH] " -ForegroundColor Red -NoNewline }
-        else { Write-Host "     [VERIFIED] " -ForegroundColor Green -NoNewline }
-        
-        Write-Host "$($mod.ModName)" -ForegroundColor White -NoNewline
-        Write-Host " | " -ForegroundColor Gray -NoNewline
-        Write-Host "$($mod.FileName)" -ForegroundColor DarkGray -NoNewline
-        
-        if ($mod.Version -and $mod.Version -ne "Unknown") {
-            Write-Host " | Version: $($mod.Version)" -ForegroundColor DarkGray -NoNewline
-        }
-        
-        $matchIndicator = switch ($mod.MatchType) {
-            { $_ -match "Exact" } { @{ Symbol = "| EXACT MATCH"; Color = "Green" } }
-            { $_ -match "Closest" } { @{ Symbol = "| CLOSE MATCH"; Color = "Yellow" } }
-            { $_ -match "Latest" } { @{ Symbol = "| LATEST VERSION"; Color = "Cyan" } }
-            default { $null }
-        }
-        
-        if ($matchIndicator) { Write-Host $matchIndicator.Symbol -ForegroundColor $matchIndicator.Color -NoNewline }
-        if ($mod.LoaderType -ne "Unknown") { Write-Host " | Loader: $($mod.LoaderType)" -ForegroundColor $(if ($mod.LoaderType -eq "Fabric") { 'Magenta' } else { 'Yellow' }) -NoNewline }
-        if ($mod.DownloadSource -ne "Unknown") { Write-Host " | Source: $($mod.DownloadSource)" -ForegroundColor $(if ($mod.IsModrinthDownload) { 'Green' } else { 'DarkYellow' }) }
-        else { Write-Host "" }
-        
-        if ($mod.ExpectedSize -gt 0) {
-            if ($mod.ActualSize -eq $mod.ExpectedSize) {
-                Write-Host "        Integrity: VERIFIED | Size: $($mod.ActualSizeKB) KB" -ForegroundColor Green
-            } else {
-                $sign = if ($mod.SizeDiffKB -gt 0) { "+" } else { "" }
-                $color = if ($isTampered) { 'Magenta' } else { 'Yellow' }
-                Write-Host "        Integrity: MODIFIED | Size: $($mod.ActualSizeKB) KB (Expected: $($mod.ExpectedSizeKB) KB, Change: $sign$($mod.SizeDiffKB) KB)" -ForegroundColor $color
-            }
-        }
-    }
-    Write-Host ""
-}
-
-if ($unknownMods.Count -gt 0) {
-    Write-Host "   [VERIFICATION RESULTS] UNKNOWN MODS ($($unknownMods.Count))" -ForegroundColor Yellow
-    Write-Host "   " + ("-" * 40) -ForegroundColor DarkGray
-    foreach ($mod in $unknownMods) {
-        $name = $mod.FileName
-        if ($name.Length -gt 50) {
-            $name = $name.Substring(0, 47) + "..."
-        }
-        
-        Write-Host "     [VERIFICATION SOURCE UNAVAILABLE] $name" -ForegroundColor Yellow
-        $sourceText = if ($mod.DownloadSource) { "        Source Origin: $($mod.DownloadSource)" } else { "        Source Origin: Unknown" }
-        Write-Host $sourceText -ForegroundColor DarkYellow
-        
-        # Show file size and mod info if available
-        if ($mod.FileSizeKB) {
-            Write-Host "        File Size: $($mod.FileSizeKB) KB" -ForegroundColor DarkGray
-        }
-        if ($mod.ModName -and $mod.ModName -ne "Unknown") {
-            Write-Host "        Mod Name: $($mod.ModName)" -ForegroundColor DarkGray
-        }
-        if ($mod.Version -and $mod.Version -ne "Unknown") {
-            Write-Host "        Version: $($mod.Version)" -ForegroundColor DarkGray
-        }
-        if ($mod.LoaderType -and $mod.LoaderType -ne "Unknown") {
-            Write-Host "        Loader: $($mod.LoaderType)" -ForegroundColor DarkGray
-        }
-        Write-Host ""
-    }
-}
-
-if ($suspiciousMods.Count -gt 0) {
-    Write-Host "   [SIGNATURE MATCHES] SUSPICIOUS PATTERNS DETECTED ($($suspiciousMods.Count))" -ForegroundColor Red
-    Write-Host "   " + ("-" * 40) -ForegroundColor DarkGray
-    Write-Host ""
-    foreach ($mod in $suspiciousMods) {
-        Write-Host "     [SUSPICIOUS PATTERN DETECTED]" -ForegroundColor Red
-        Write-Host "       File: $($mod.FileName)" -ForegroundColor Yellow
-        
-        # Check for attribute bypass
-        if ($mod.HasAttributeBypass) {
-            Write-Host "       [!] ATTRIB BYPASS DETECTED - Hidden/System attributes" -ForegroundColor Red
-        }
-        
-        if ($mod.ModName) {
-            Write-Host "       Product: $($mod.ModName)" -ForegroundColor Yellow
-        }
-        
-        Write-Host "       Suspicious Patterns Identified:" -ForegroundColor Red
-        
-        $patterns = $mod.DetectedPatterns | Sort-Object
-        foreach ($p in $patterns) {
-            Write-Host "         [-] $p" -ForegroundColor White
-        }
-        
-        Write-Host ""
-    }
-}
-
-if ($tamperedMods.Count -gt 0) {
-    Write-Host "   [INTEGRITY FINDINGS] MODIFIED FILES DETECTED ($($tamperedMods.Count))" -ForegroundColor Magenta
-    Write-Host "   " + ("-" * 40) -ForegroundColor DarkGray
-    
-    foreach ($mod in $tamperedMods) {
-        $sign = if ($mod.SizeDiffKB -gt 0) { "+" } else { "" }
-        Write-Host "     [MODIFICATION DETECTED] $($mod.FileName)" -ForegroundColor Magenta
-        Write-Host "       Product: $($mod.ModName)" -ForegroundColor Yellow
-        
-        if ($mod.LoaderType -ne "Unknown") {
-            $loaderColor = if ($mod.LoaderType -eq "Fabric") { 'Magenta' } else { 'Yellow' }
-            Write-Host "       Platform: $($mod.LoaderType)" -ForegroundColor $loaderColor
-        }
-        
-        Write-Host "       Original Size: $($mod.ExpectedSizeKB) KB | Current Size: $($mod.ActualSizeKB) KB | Change: $sign$($mod.SizeDiffKB) KB" -ForegroundColor Magenta
-        Write-Host "       File integrity compromised - significant size deviation detected!" -ForegroundColor Red
-        
-        if ($mod.ModrinthUrl) {
-            Write-Host "       Reference Link: $($mod.ModrinthUrl)" -ForegroundColor DarkGray
-        }
-        
-        Write-Host ""
-    }
-}
-
-if ($attributeManipulatedMods.Count -gt 0) {
-    Write-Host "   [ATTRIB BYPASS] HIDDEN/MANIPULATED FILES DETECTED ($($attributeManipulatedMods.Count))" -ForegroundColor Red
-    Write-Host "   " + ("-" * 40) -ForegroundColor DarkGray
-    Write-Host ""
-    
-    foreach ($mod in $attributeManipulatedMods) {
-        $attrFlags = @()
-        if ($mod.IsHidden) { $attrFlags += "HIDDEN" }
-        if ($mod.IsSystem) { $attrFlags += "SYSTEM" }
-        
-        Write-Host "     [$($attrFlags -join ', ')] $($mod.FileName)" -ForegroundColor Red
-        Write-Host "       Product: $($mod.ModName)" -ForegroundColor Yellow
-        Write-Host "       Attributes: $($mod.Attributes)" -ForegroundColor White
-        Write-Host "       Path: $($mod.FilePath)" -ForegroundColor Gray
-        Write-Host ""
-    }
-    
-    Write-Host "   [WARNING] These files are using 'attrib +h/+s' bypass method!" -ForegroundColor Red
-    Write-Host "   [INFO] Common technique to hide cheat clients from File Explorer" -ForegroundColor Yellow
-    Write-Host "   [REMEDIATION] Run: attrib -h -s `"filepath`" to reveal and delete" -ForegroundColor DarkYellow
-    Write-Host ""
-}
-
-Write-Host ""
-Write-Host "   Security scan completed." -ForegroundColor Cyan
-Write-Host ""
-Write-Host "   Developed by: DrValor" -ForegroundColor Gray
-Write-Host "   Based on work by: Hadron, TonyNoh, YarpLetapStan" -ForegroundColor DarkGray
-Write-Host ""
-Write-Host "   " + ("=" * 50) -ForegroundColor Blue
-Write-Host ""
-Write-Host "Press any key to exit..." -ForegroundColor DarkGray
-$null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+# No console output - results are in HTML report only
