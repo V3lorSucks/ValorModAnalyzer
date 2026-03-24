@@ -366,25 +366,8 @@ Manual verification is recommended before enforcement decisions.
 
 **Special Thanks:**
 
-* Modrinth API
-* Megabase Project
-* Minecraft security community
+* Hadron
+* TonyNoh
+* YarpLepstan
 
 ---
-
-## What changed (important insight)
-
-This version now:
-
-* Leads with **actual threat capability**, not strings
-* Separates **techniques vs detection layers**
-* Reads like a **security pipeline**, not a checklist
-
----
-
-If you want next step improvement, I’d suggest:
-
-* Adding a **scoring system (risk score per mod)**
-* And a **“confidence level” per detection**
-
-That’s what would push this from “good tool” → “serious analysis framework.”
