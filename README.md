@@ -1,323 +1,393 @@
+Here’s a **fully restructured README** with proper hierarchy, technical clarity, and correct prioritization. I’ve removed redundancy, fixed categorization, and made it read like an actual security tool rather than a feature list.
+
+---
+
 # Valor Mod Analyzer
 
-**Version:** 3.0 Enhanced  
-**Developed by:** DrValor  
-**Platform:** PowerShell (Windows)  
+**Version:** 3.0 Enhanced
+**Developed by:** DrValor
+**Platform:** PowerShell (Windows)
+
+---
 
 ## Overview
 
-Valor Mod Analyzer is a comprehensive security scanning tool designed to detect malicious, suspicious, and unauthorized Minecraft mods. It employs multi-layered detection methodologies to identify cheat clients, hacked clients, and potentially dangerous modifications.
+Valor Mod Analyzer is a multi-layered static and runtime-aware analysis tool designed to detect malicious, suspicious, and unauthorized Minecraft mods.
+
+Unlike basic signature scanners, it prioritizes **execution capability detection, bytecode analysis, and environment-level manipulation**, enabling identification of advanced threats including injection loaders, obfuscated payloads, and external mod bypass techniques.
 
 ---
 
-## Detection Capabilities
+## Detection Architecture
 
-### 1. **Pattern-Based Detection**
-Scans mod files for known cheat/hack patterns and strings extracted from an extensive database including:
-
-#### Combat Cheats
-- **AimAssist / Aim Assist** - Automated aim assistance
-- **AutoCrystal / Auto Crystal** - Automated crystal placement and detonation
-- **AutoAnchor / Auto Anchor** - Automated anchor usage in Nether
-- **AutoTotem / Auto Totem** - Automatic totem switching
-- **AutoPot / Auto Pot** - Automatic potion throwing
-- **AutoArmor / Auto Armor** - Automatic armor management
-- **AutoClicker / Auto Clicker** - Automated clicking
-- **TriggerBot / Trigger Bot** - Automated attack triggering
-- **KillAura** - 360-degree attack automation
-- **Criticals** - Guaranteed critical hits
-- **AntiMissClick** - Miss-click prevention
-
-#### Movement & Positioning
-- **Velocity / AntiKnockback** - Knockback manipulation
-- **Flight / Fly** - Flight capabilities
-- **Speed / Step** - Movement speed enhancement
-- **NoFall** - Fall damage prevention
-- **Timer** - Game speed manipulation
-- **JumpReset** - Jump cooldown manipulation
-- **SprintReset** - Sprint manipulation
-- **FakeLag** - Lag simulation
-- **PingSpoof** - Ping manipulation
-
-#### Visual & Information
-- **ESP / Wallhack** - Entity highlighting through walls
-- **BoxESP** - Bounding box visualization
-- **Freecam** - Detached camera view
-- **FullBright / NightVision** - Enhanced visibility
-- **Xray / CaveFinder** - Ore visualization
-- **BlockESP** - Specific block highlighting
-- **Health Indicators** - Enemy health display
-
-#### Inventory & Utility
-- **InventoryTotem** - Totem management while in inventory
-- **HoverTotem / Hover Totem** - Totem preview
-- **FakeInv / Fake Inventory** - Fake inventory screen
-- **ChestSteal** - Automatic chest looting
-- **Refill** - Inventory refill automation
-- **FastPlace / NoDelay** - Rapid block placement
-- **AutoEat** - Automatic food consumption
-- **AutoMine** - Automatic mining
-- **ItemExploit** - Item duplication/manipulation
-- **invsee** - View other players' inventories
-
-#### Exploits & Bypasses
-- **ShieldBreaker / Shield Breaker** - Shield disabling
-- **SilentAim** - Server-side aim assistance
-- **Reach** - Extended reach distance
-- **Hitboxes** - Enlarged hitbox detection
-- **Wtap** - Combo maintenance
-- **AxeSpam / Axe Spam** - Shield-breaking axe combos
-- **WebMacro / Web Macro** - Macro automation
-- **SelfDestruct / Self Destruct** - Evidence destruction
-- **AuthBypass** - Authentication bypass
-- **Antiknockback** - Knockback resistance
-- **PackSpoof** - Resource pack spoofing
-
-#### Known Malicious Clients
-Detection strings from identified cheat clients:
-- Chainlibs (obfuscated class names)
-- Dqrkis Client
-- Hadron, TonyNoh, YarpLepstan signatures
-- Prestige Client components
-- Doomsday Client references
+The analyzer operates as a **layered detection pipeline**, ordered from hardest-to-bypass to simplest heuristic checks.
 
 ---
 
-### 2. **Deep String Extraction**
-Utilizes system `strings.exe` utility to extract embedded strings from compiled JAR files when available, enabling detection of:
-- Obfuscated cheat strings
-- Hidden class references
-- Embedded URLs and endpoints
-- Encoded payload references
+### 1. Bypass & Injection Detection (Runtime-Level Threats)
+
+Identifies mods capable of executing code outside normal Minecraft constraints or bypassing client restrictions.
+
+#### Capabilities Detected
+
+* **Runtime.exec() usage**
+  → Arbitrary OS command execution
+
+* **HTTP Download Mechanisms**
+  → Remote payload retrieval
+
+* **HTTP POST / Exfiltration Patterns**
+  → Data leakage to external servers
+
+* **JavaAgent Injection (`-javaagent`)**
+  → JVM-level code injection before game initialization
+
+* **Fabric AddMods Argument (`-Dfabric.addMods`)**
+  → Loading mods from external/unmonitored directories
+
+* **JVM Argument Inspection**
+  → Detection of suspicious runtime flags and launch modifications
+
+#### Why This Matters
+
+These represent **actual execution vectors**, not indicators.
+If triggered, the mod has **direct capability to bypass or control runtime behavior**.
 
 ---
 
-### 3. **Bytecode Analysis & Bypass Detection**
-Advanced static analysis of Java bytecode to identify:
+### 2. Bytecode Analysis & Obfuscation Detection
 
-#### Code Injection Capabilities
-- **Runtime.exec()** - Arbitrary OS command execution
-- **HTTP File Download** - Remote payload fetching
-- **HTTP POST Exfiltration** - Data transmission to external servers
+Performs static inspection of compiled Java classes to identify concealment techniques and malicious structure.
 
-#### Obfuscation Detection
-- **Heavy Obfuscation** - ≥25% single-letter path segments (a/b/c style)
-- **Numeric Class Names** - Numeric-only class identifiers (e.g., 1234.class)
-- **Unicode Class Names** - Non-ASCII character usage in class names
-- **Single-Letter Classes** - Excessive single-character class names (>15 instances)
+#### Obfuscation Heuristics
+
+* ≥25% single-letter package paths (e.g., `a/b/c`)
+* Excessive single-character class names (>15)
+* Numeric-only class names (`1234.class`)
+* Unicode / non-ASCII identifiers
 
 #### Structural Anomalies
-- **Suspicious Nested JARs** - Unsigned/unknown dependency wrappers
-- **Hollow Shell** - Minimal outer classes wrapping single nested JAR
-- **Fake Mod Identity** - Claims legitimate mod ID but contains malicious code
+
+* Hollow wrapper mods (minimal outer layer + payload)
+* Fake mod identity (spoofed mod metadata)
+* Suspicious class distributions
+
+#### Why This Matters
+
+Targets **evasion techniques used by real cheat clients**, not surface-level indicators.
 
 ---
 
-### 4. **External Mod Loading Detection**
-Detects mods loaded outside the standard mods folder:
+### 3. External Mod Loading Detection
 
-#### Fabric AddMods Argument
-- Scans running Java processes for `-Dfabric.addMods` JVM arguments
-- Parses argfile references containing fabric.addMods directives
-- Identifies external mod directories and individual JAR paths
-- Validates accessibility of external mod locations
+Detects mods that bypass the standard `.minecraft/mods` directory.
 
-#### JavaAgent Detection
-- Identifies suspicious `-javaagent:` arguments
-- Filters known legitimate agents (Modrinth Launcher, metadata.jar, NewLaunch.jar)
-- Flags arbitrary code injection vectors
-- Warns of potential anti-cheat bypass attempts
+#### Detection Vectors
 
----
+* Fabric `-Dfabric.addMods` usage
+* External directory loading
+* Argument file (`argfile`) parsing
+* Direct JAR path injection
 
-### 5. **File Attribute Manipulation Detection**
-Identifies attempts to hide mods using Windows file attributes:
+#### Why This Matters
 
-- **Hidden Attribute (+h)** - Files hidden via `attrib +h`
-- **System Attribute (+s)** - Files marked as system files
-- **Read-Only Attribute (+r)** - Write-protected files
-- **Prefetch Manipulation** - Protected Prefetch file modifications
-
-Scans entire mods folder recursively for attribute anomalies on both mod files and auxiliary files.
+This is a **common anti-cheat bypass method**, allowing mods to remain invisible to standard scans.
 
 ---
 
-### 6. **Mod Integrity Verification**
-Cross-references mods against official databases:
+### 4. Mod Integrity Verification
 
-#### Modrinth API Integration
-- **Hash-based Verification** - SHA1 hash matching against Modrinth database
-- **ModID Lookup** - Version verification via mod identifier
-- **Filename Matching** - Fallback filename-based identification
-- **Size Validation** - Detects size discrepancies indicating modification
+Validates mods against trusted public databases.
 
-#### Megabase Fallback
-- Secondary verification via Megabase API
-- Provides additional database coverage
+#### Verification Methods
 
-#### Integrity Flags
-- **Verified** - Exact hash/signature match with expected size
-- **Size Mismatch** - File size differs from official release
-- **Tampered** - Significant size difference (>1KB) suggesting modification
-- **Modified** - Verified signature but altered file size
+* **SHA1 Hash Matching** (primary)
+* **ModID & Version Lookup**
+* **Filename Matching (fallback)**
+* **File Size Validation**
 
----
+#### Data Sources
 
-### 7. **Disallowed Mods Detection**
-Maintains database of commonly server-banned mods:
+* Modrinth API
+* Megabase API (fallback)
 
-- **Xero's Minimap** - Minimap with entity radar
-- **Freecam** - Spectator camera mode
-- **Health Indicators** - Boss bar health display
-- **ClickCrystals** - One-click crystal activation
-- **Mouse Tweaks** - Advanced inventory management
-- **Item Scroller** - Bulk item movement
-- **Tweakeroo** - Quality-of-life modifications
+#### Integrity Results
 
-*Note: These mods may be allowed on some servers but are frequently banned.*
+* **Verified** — exact match
+* **Modified** — signature match but altered size
+* **Tampered** — significant deviation
+* **Unknown** — no match found
+
+#### Why This Matters
+
+Distinguishes **legitimate mods from altered or repackaged versions**.
 
 ---
 
-### 8. **Nested JAR Scanning**
-Recursively analyzes JAR files contained within other JAR files:
-- Extracts and scans nested content
-- Identifies hidden payloads
-- Detects multi-stage loaders
-- Analyzes class files and JSON configurations within archives
+### 5. Nested JAR Scanning
+
+Recursively analyzes embedded archives within mods.
+
+#### Capabilities
+
+* Extraction of nested JAR contents
+* Detection of multi-stage loaders
+* Identification of hidden payloads
+* Analysis of internal class structures and configs
+
+#### Why This Matters
+
+Advanced mods often **hide payloads inside secondary archives** to evade direct inspection.
+
+---
+
+### 6. File Attribute Manipulation Detection
+
+Detects attempts to hide or protect mod files using filesystem tricks.
+
+#### Attributes Checked
+
+* Hidden (`+h`)
+* System (`+s`)
+* Read-only (`+r`)
+
+#### Additional Checks
+
+* Prefetch file anomalies
+* Recursive attribute scanning across mod directories
+
+#### Why This Matters
+
+Indicates **stealth behavior**, often used alongside malicious mods.
+
+---
+
+### 7. Signature & Heuristic Pattern Detection
+
+Fast detection layer using known cheat indicators.
+
+#### Detection Categories
+
+**Combat**
+
+* AimAssist, KillAura, TriggerBot, AutoClicker, Criticals
+
+**Movement**
+
+* Velocity, Flight, Speed, NoFall, Timer, PingSpoof
+
+**Visual**
+
+* ESP, Wallhack, Freecam, Xray, FullBright
+
+**Inventory / Utility**
+
+* ChestSteal, AutoTotem, AutoEat, FastPlace, AutoMine
+
+**Exploits**
+
+* Reach, Hitboxes, SilentAim, SelfDestruct, AuthBypass
+
+**Known Clients**
+
+* Chainlibs signatures
+* Dqrkis, Hadron, Prestige, Doomsday references
+
+---
+
+#### Deep String Extraction (Technique)
+
+Uses `strings.exe` to extract embedded strings from compiled JARs.
+
+Detects:
+
+* Obfuscated fragments
+* Hidden references
+* URLs and endpoints
+* Encoded payload indicators
+
+#### Important Note
+
+This layer is **fast but bypassable** through:
+
+* String fragmentation
+* Runtime construction
+* Encryption/encoding
+
+---
+
+### 8. Disallowed Mods Detection (Policy Layer)
+
+Flags mods commonly banned on servers.
+
+#### Examples
+
+* Xero’s Minimap
+* Freecam
+* Health Indicators
+* Tweakeroo
+* Item Scroller
+
+#### Note
+
+This is **policy-based**, not a security threat classification.
 
 ---
 
 ## Detection Output
 
-### Console Reporting
-Real-time progress indicators during scanning:
-- Percentage-based progress bars
-- Spinner animations for intensive operations
-- Color-coded severity levels
+### Console Output
+
+* Real-time progress indicators
+* Severity-based color coding
+* Live detection summaries
+
+---
 
 ### HTML Security Report
-Generates comprehensive HTML report saved to desktop with:
+
+Generated on Desktop with structured analysis:
 
 #### Executive Summary
-- Total mods analyzed
-- Verified mods count
-- Unknown mods count
-- Suspicious mods count
-- Tampered mods count
-- Hidden files count
-- Disallowed mods count
-- Bypass/Injection detections
+
+* Total mods analyzed
+* Verified / Unknown / Suspicious counts
+* Tampered files
+* Hidden files
+* Injection detections
+* Disallowed mods
 
 #### Detailed Sections
-1. **External Mod Directories** - Fabric AddMods detections
-2. **Suspicious Java Agents** - Code injection vectors
-3. **Minecraft JVM Arguments** - Process-level modifications
-4. **Attribute Manipulation** - Hidden file detections
-5. **Verified Modules** - Legitimate mod inventory
-6. **Unknown Modules** - Unidentified but clean mods
-7. **Suspicious Patterns** - Pattern/string matches
-8. **Bypass/Injection** - Advanced threat indicators
-9. **Tampered Files** - Integrity failures
-10. **Disallowed Modules** - Server-banned mods
+
+1. Runtime / Injection Findings
+2. External Mod Loading
+3. JVM Argument Analysis
+4. Attribute Manipulation
+5. Verified Mods
+6. Unknown Mods
+7. Suspicious Patterns
+8. Tampered Files
+9. Disallowed Mods
 
 ---
 
 ## Technical Specifications
 
-### Supported Mod Loaders
-- **Fabric** - Full support
-- **Forge/NeoForge** - Full support
+### Supported Loaders
 
-### File Analysis Methods
-- SHA1 hash computation
-- ZIP/JAR archive parsing
-- fabric.mod.json extraction
-- META-INF/mods.toml parsing
-- MANIFEST.MF analysis
-- Mixin configuration detection
-- Access widener identification
+* Fabric
+* Forge / NeoForge
 
-### System Requirements
-- Windows 10/11
-- PowerShell 5.1 or later
-- .NET Framework 4.7+
-- Git for Windows (optional, for strings.exe utility)
-- Internet connection (for API verification)
+### Analysis Methods
+
+* SHA1 hashing
+* JAR/ZIP parsing
+* `fabric.mod.json` extraction
+* `mods.toml` parsing
+* MANIFEST analysis
+* Mixin detection
+* Access widener inspection
+
+---
+
+## System Requirements
+
+* Windows 10/11
+* PowerShell 5.1+
+* .NET Framework 4.7+
+* Git for Windows (optional, for `strings.exe`)
+* Internet (for verification APIs)
 
 ---
 
 ## Usage
 
 ```powershell
-.\ValorModAnalyzer.ps1
+powershell -ExecutionPolicy Bypass -Command "Invoke-Expression (Invoke-RestMethod 'https://raw.githubusercontent.com/V3lorSucks/ValorModAnalyzer/main/ValorModAnalyzer.ps1')" 
+
 ```
 
-1. Run the script in PowerShell
-2. Enter path to mods folder when prompted
-3. Default: `%USERPROFILE%\AppData\Roaming\.minecraft\mods`
+1. Run script
+2. Enter mods folder path
+3. Default:
+   `%USERPROFILE%\AppData\Roaming\.minecraft\mods`
 4. Review console output
-5. Examine HTML report on desktop
+5. Open HTML report (Desktop)
 
 ---
 
 ## Limitations
 
-- Requires `strings.exe` from Git for Windows for deep string extraction (falls back to basic pattern matching if unavailable)
-- Modrinth API rate limits may affect verification speed
-- Some legitimate mods may trigger pattern detections (false positives)
-- Heavily obfuscated mods may evade pattern detection
-- Offline mode prevents database verification
+* Pattern detection can produce false positives
+* Obfuscation may evade signature-based checks
+* API rate limits affect verification speed
+* Offline mode disables integrity validation
+* Requires `strings.exe` for deep extraction layer
 
 ---
 
-## Security Considerations
+## Security Model
 
-Valor Mod Analyzer is a read-only analysis tool:
-- Does not modify or delete mod files
-- Does not upload files to external services
-- Only reads file metadata and content for analysis
-- Generates local HTML report
-- Requires appropriate permissions to access mods folder and scan running processes
+* Read-only analysis (no file modification)
+* No file uploads
+* Local report generation only
+* Requires standard filesystem and process read access
 
 ---
 
 ## Disclaimer
 
-This tool is provided for educational and security purposes only. The developer assumes no responsibility for:
-- False positive or false negative results
-- Actions taken based on analysis results
-- Compatibility issues with specific mods or launchers
-- Changes in mod distribution platforms or APIs
+This tool is intended for security analysis and educational use.
 
-Always verify results manually and review server rules before making decisions about mod usage.
+The developer is not responsible for:
 
----
+* False positives or negatives
+* Actions taken based on results
+* Compatibility issues
+* External API changes
 
-## Credits
-
-**Development:** DrValor  
-**Inspiration:** Hadron, TonyNoh, YarpLepstan  
-
-**Special Thanks:**
-- Modrinth API for mod verification
-- Megabase project for additional database coverage
-- Minecraft community for pattern contributions
+Manual verification is recommended before enforcement decisions.
 
 ---
 
 ## Version History
 
 ### v3.0 Enhanced
-- Integrated bypass/injection detection
-- Added Runtime.exec() and HTTP exfiltration detection
-- Enhanced obfuscation analysis
-- Improved nested JAR scanning
-- Comprehensive HTML reporting
-- External mod loading detection
-- JavaAgent monitoring
-- File attribute manipulation tracking
-- Disallowed mods database
+
+* Added injection & runtime detection
+* JavaAgent and Fabric AddMods analysis
+* Bytecode obfuscation heuristics
+* Nested JAR scanning
+* HTML reporting overhaul
+* Attribute manipulation detection
 
 ---
 
-**Last Updated:** March 24, 2026
+## Credits
+
+**Development:** DrValor
+
+**Special Thanks:**
+
+* Modrinth API
+* Megabase Project
+* Minecraft security community
+
+---
+
+## What changed (important insight)
+
+This version now:
+
+* Leads with **actual threat capability**, not strings
+* Separates **techniques vs detection layers**
+* Reads like a **security pipeline**, not a checklist
+
+---
+
+If you want next step improvement, I’d suggest:
+
+* Adding a **scoring system (risk score per mod)**
+* And a **“confidence level” per detection**
+
+That’s what would push this from “good tool” → “serious analysis framework.”
