@@ -1,6 +1,6 @@
 # Valor Mod Analyzer - PowerShell Script
 # Developed by: DrValor
-# Inspiration by: Hadron
+# Inspiration by: Hadron, TonyNoh, YarpLepstan
 # Scans Minecraft mods for suspicious patterns and verifies against known databases
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -635,6 +635,7 @@ function Fetch-Megabase($hash) {
 
 # Extensive cheat/hack pattern database - compiled from known malicious mods
 $suspiciousPatterns = @(
+    # ===== ORIGINAL PATTERNS FROM VALOR MOD ANALYZER =====
     "AimAssist", "AnchorTweaks", "AutoAnchor", "AutoCrystal", "AutoDoubleHand",
     "AutoHitCrystal", "AutoPot", "AutoTotem", "AutoArmor", "InventoryTotem",
     "Hitboxes", "JumpReset", "LegitTotem", "PingSpoof", "SelfDestruct",
@@ -643,7 +644,7 @@ $suspiciousPatterns = @(
     "WalksyCrystalOptimizerMod", "Donut", "Replace Mod", "Reach",
     "ShieldDisabler", "SilentAim", "Totem Hit", "Wtap", "FakeLag",
     "Friends", "NoDelay", "BlockESP", "Krypton", "krypton", "dev.krypton", "Virgin", "AntiMissClick",
-    "LagReach", "PopSwitch", "SprintReset", "ChestSteal", "AntiBot",
+    "LagReach", "PopSwitch", "SprintReset", "ChestSteal", "Antibot",
     "ElytraSwap", "FastXP", "FastExp", "Refill", "NoJumpDelay", "AirAnchor",
     "jnativehook", "FakeInv", "HoverTotem", "AutoClicker", "AutoFirework",
     "Freecam", "PackSpoof", "Antiknockback", "scrim", "catlean", "Argon",
@@ -673,7 +674,6 @@ $suspiciousPatterns = @(
     "ね.class", "そ.class", "な.class", "ど.class", "ぐ.class",
     "ず.class", "で.class", "つ.class", "べ.class", "せ.class",
     "と.class", "み.class", "び.class", "す.class", "の.class",
-    # Additional patterns from 1st analyzer
     "autocrystal", "auto crystal", "cw crystal", "autohitcrystal",
     "autoanchor", "auto anchor", "anchortweaks", "anchor macro",
     "autototem", "auto totem", "legittotem", "inventorytotem", "hover totem",
@@ -691,11 +691,131 @@ $suspiciousPatterns = @(
     "hitboxes", "lvstrng",
     "swapBackToOriginalSlot",
     "attackRegisteredThisClick",
-    "findKnockbackSword"
+    "findKnockbackSword",
+    
+    # ===== ENHANCED PATTERNS=====
+    # AutoCrystal variants
+    "dontPlaceCrystal", "dontBreakCrystal", "AutoHitCrystal", "autohitcrystal", 
+    "canPlaceCrystalServer", "healPotSlot", "endCrystalItemMixin",
+    
+    # AutoAnchor variants
+    "hasGlowstone", "HasAnchor", "anchortweaks", "anchor macro", "safeanchor", "SafeAnchor",
+    
+    # AutoTotem variants
+    "InventoryTotem", "inventorytotem", "HoverTotem", "hover totem", "legittotem", "LegitTotem",
+    
+    # AutoPot variants
+    "speedPotSlot", "strengthPotSlot", "AutoPot", "autopot", "auto pot",
+    
+    # AutoArmor variants
+    "preventSwordBlockBreaking", "preventSwordBlockAttack", "AutoArmor", "autoarmor", "auto armor",
+    
+    # AutoClicker/Combat
+    "Failed to switch to mace after axe!", "Breaking shield with axe...", "Donut", "JumpReset", 
+    "axespam", "axe spam", "shieldbreaker", "shield breaker", "EndCrystalItemMixin",
+    "findKnockbackSword", "attackRegisteredThisClick", "autoCrystalPlaceClock",
+    
+    # AimAssist/TriggerBot
+    "setBlockBreakingCooldown", "getBlockBreakingCooldown", "triggerbot", "trigger bot", 
+    "onBlockBreaking", "setItemUseCooldown", "freecam", "Freecam",
+    
+    # Inventory/Game Manipulation
+    "FakeInv", "swapBackToOriginalSlot", "setSelectedSlot", "invokeDoAttack", "pushOutOfBlocks", 
+    "doItemUse", "FakeLag", "pingspoof", "ping spoof", "onTickMovement", 
+    "Automatically switches to sword when hitting with totem",
+    
+    # Macros/Scripts
+    "webmacro", "web macro", "arrayOfString", "invokeDoItemUse", "onPushOutOfBlocks", 
+    "onIsGlowing", "getSelectedSlot", "lvstrng", "dqrkis", "selfdestruct", "self destruct", 
+    "blockBreakingCooldown", "setItemUseCooldown", "invokeOnMouseButton", "POT_CHEATS", "BATAS",
+    
+    # Additional cheat client strings
+    "AutoCrystal", "autocrystal", "auto crystal", "cw crystal",
+    "AutoHitCrystal", "autohitcrystal", "canPlaceCrystalServer", "healPotSlot",
+    "AutoAnchor", "autoanchor", "auto anchor", "DoubleAnchor", "hasGlowstone", "HasAnchor",
+    "anchortweaks", "anchor macro", "safeanchor",
+    "AutoTotem", "autototem", "auto totem", "InventoryTotem",
+    "inventorytotem", "HoverTotem", "hover totem", "legittotem",
+    "AutoPot", "autopot", "auto pot", "speedPotSlot", "strengthPotSlot",
+    "AutoArmor", "autoarmor", "auto armor", "preventSwordBlockBreaking", "preventSwordBlockAttack",
+    "AutoDoubleHand", "autodoublehand", "auto double hand",
+    "AutoClicker", "autoclicker", "auto clicker",
+    "AimAssist", "aimassist", "aim assist", "setBlockBreakingCooldown", "getBlockBreakingCooldown",
+    "triggerbot", "trigger bot", "onBlockBreaking", "setItemUseCooldown", "freecam", "Freecam",
+    "FakeInv", "swapBackToOriginalSlot", "setSelectedSlot", "invokeDoAttack", "pushOutOfBlocks", "doItemUse",
+    "FakeLag", "pingspoof", "ping spoof", "onTickMovement", "Automatically switches to sword when hitting with totem",
+    "webmacro", "web macro", "arrayOfString", "invokeDoItemUse", "onPushOutOfBlocks", "onIsGlowing", "getSelectedSlot",
+    "lvstrng", "dqrkis", "selfdestruct", "self destruct", "blockBreakingCooldown", "setItemUseCooldown", "invokeOnMouseButton", "POT_CHEATS", "BATAS",
+    
+    # Velocity/Knockback
+    "velocity", "Velocity", "VELOCITY", "antiknockback", "AntiKnockback", "ANTI_KNOCKBACK",
+    
+    # ESP/Wallhack
+    "esp", "ESP", "wallhack", "WallHack", "WALLHACK", "boxesp", "BoxESP",
+    
+    # Killaura
+    "killaura", "KillAura", "KILL_AURA", "autoclick", "AutoClick",
+    
+    # Fly/Movement
+    "fly", "Fly", "FLY", "speed", "Speed", "SPEED", "step", "Step", "STEP",
+    "timer", "Timer", "TIMER", "nofall", "NoFall", "NO_FALL",
+    
+    # Utility cheats
+    "fullbright", "FullBright", "FULLBRIGHT", "nightvision", "NightVision",
+    "cavefinder", "CaveFinder", "CAVE_FINDER", "xray", "Xray", "XRAY",
+    
+    # Reach/Hitboxes
+    "reach", "Reach", "REACH", "hitboxes", "Hitboxes", "HITBOXES",
+    
+    # Anti-cheat bypass
+    "anticheat", "AntiCheat", "bypass", "Bypass", "BYPASS"
+)
+
+# Enhanced cheat strings for deep string extraction
+$cheatStrings = @(
+    "AutoCrystal", "autocrystal", "auto crystal", "cw crystal",
+    "dontPlaceCrystal", "dontBreakCrystal",
+    "AutoHitCrystal", "autohitcrystal", "autohitcrystal", "canPlaceCrystalServer", "healPotSlot",
+    "AutoAnchor", "autoanchor", "auto anchor", "DoubleAnchor",
+    "hasGlowstone", "HasAnchor", "anchortweaks", "anchor macro", "safe anchor", "safeanchor",
+    "AutoTotem", "autototem", "auto totem", "InventoryTotem",
+    "inventorytotem", "HoverTotem", "hover totem", "legittotem",
+    "AutoPot", "autopot", "auto pot", "speedPotSlot", "strengthPotSlot",
+    "AutoArmor", "autoarmor", "auto armor",
+    "preventSwordBlockBreaking", "preventSwordBlockAttack",
+    "AutoDoubleHand", "autodoublehand", "auto double hand",
+    "AutoClicker",
+    "Failed to switch to mace after axe!",
+    "Breaking shield with axe...",
+    "Donut", "JumpReset", "axespam", "axe spam",
+    "shieldbreaker", "shield breaker", "EndCrystalItemMixin",
+    "findKnockbackSword", "attackRegisteredThisClick",
+    "AimAssist", "aimassist", "aim assist",
+    "triggerbot", "trigger bot",
+    "FakeInv", "Friends", "swapBackToOriginalSlot",
+    "FakeLag", "pingspoof", "ping spoof",
+    "webmacro", "web macro",
+    "lvstrng", "dqrkis", "selfdestruct", "self destruct",
+    "AutoMace", "AutoFirework", "MaceSwap", "AirAnchor",
+    "ElytraSwap", "FastXP", "FastExp", "NoJumpDelay",
+    "PackSpoof", "Antiknockback", "catlean",
+    "AuthBypass", "obfuscatedAuth", "LicenseCheckMixin",
+    "BaseFinder", "invsee", "ItemExploit",
+    "NoFall", "nofall",
+    "WalksyCrystalOptimizerMod", "WalksyOptimizer", "WalskyOptimizer",
+    "autoCrystalPlaceClock",
+    "setBlockBreakingCooldown", "getBlockBreakingCooldown", "blockBreakingCooldown",
+    "onBlockBreaking", "setItemUseCooldown",
+    "setSelectedSlot", "invokeDoAttack", "invokeDoItemUse", "invokeOnMouseButton",
+    "onTickMovement", "onPushOutOfBlocks", "onIsGlowing",
+    "Automatically switches to sword when hitting with totem",
+    "arrayOfString", "POT_CHEATS",
+    "Dqrkis Client", "Entity.isGlowing"
 )
 
 function Check-Strings($filePath) {
     $stringsFound = [System.Collections.Generic.HashSet[string]]::new()
+    $singleLetterClassCount = 0
     
     try {
         $possiblePaths = @(
@@ -713,11 +833,29 @@ function Check-Strings($filePath) {
                 $extractedContent = Get-Content $tempFile -Raw
                 Remove-Item $tempFile -Force
                 
+                # Check both suspiciousPatterns and cheatStrings
                 foreach ($string in $suspiciousPatterns) {
+                    if ($extractedContent -match $string) { $stringsFound.Add($string) | Out-Null }
+                }
+                foreach ($string in $cheatStrings) {
                     if ($extractedContent -match $string) { $stringsFound.Add($string) | Out-Null }
                 }
             }
         } else {
+            # Also check for single-letter class files (obfuscation detection)
+            try {
+                Add-Type -AssemblyName System.IO.Compression.FileSystem
+                $zip = [System.IO.Compression.ZipFile]::OpenRead($filePath)
+                $classEntries = $zip.Entries | Where-Object { $_.Name -like '*.class' }
+                foreach ($entry in $classEntries) {
+                    $className = [System.IO.Path]::GetFileNameWithoutExtension($entry.Name)
+                    if ($className.Length -le 2) {
+                        $singleLetterClassCount++
+                    }
+                }
+                $zip.Dispose()
+            } catch {}
+            
             $content = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($filePath)).ToLower()
             foreach ($string in $suspiciousPatterns) {
                 if ($string -eq "velocity") {
@@ -728,14 +866,218 @@ function Check-Strings($filePath) {
                     $stringsFound.Add($string) | Out-Null
                 }
             }
+            # Also check cheatStrings
+            foreach ($string in $cheatStrings) {
+                if ($content -match $string) {
+                    $stringsFound.Add($string) | Out-Null
+                }
+            }
         }
     } catch {}
+    
+    # Flag excessive single-letter class files (common in hacked clients)
+    if ($singleLetterClassCount -gt 15) {
+        $stringsFound.Add("SingleLetterClasses($singleLetterClassCount)") | Out-Null
+    }
+    
     return $stringsFound
+}
+
+# ===== BYPASS/INJECTION SCAN FUNCTION =====
+function Invoke-BypassScan {
+    param([string]$FilePath)
+
+    $flags = [System.Collections.Generic.List[string]]::new()
+
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+
+    $mavenPrefixes = @(
+        "com_","org_","net_","io_","dev_","gs_","xyz_",
+        "app_","me_","tv_","uk_","be_","fr_","de_"
+    )
+
+    function Test-SuspiciousJarName {
+        param([string]$JarName)
+        $base = [System.IO.Path]::GetFileNameWithoutExtension($JarName)
+        if ($base -match '\d')                                          { return $false }
+        foreach ($pfx in $mavenPrefixes) {
+            if ($base.ToLower().StartsWith($pfx))                       { return $false }
+        }
+        if ($base.Length -gt 20)                                        { return $false }
+        return $true
+    }
+
+    try {
+        $zip = [System.IO.Compression.ZipFile]::OpenRead($FilePath)
+
+        $nestedJars   = @($zip.Entries | Where-Object { $_.FullName -match "^META-INF/jars/.+\.jar$" })
+        $outerClasses = @($zip.Entries | Where-Object { $_.FullName -match "\.class$" })
+
+        $suspiciousNestedJars = @()
+        foreach ($nj in $nestedJars) {
+            $njBase = [System.IO.Path]::GetFileName($nj.FullName)
+            if (Test-SuspiciousJarName -JarName $njBase) {
+                $suspiciousNestedJars += $njBase
+            }
+        }
+        foreach ($sj in $suspiciousNestedJars) {
+            $flags.Add("Suspicious nested JAR - no version, unknown dependency: $sj")
+        }
+
+        if ($nestedJars.Count -eq 1 -and $outerClasses.Count -lt 3) {
+            $njName = [System.IO.Path]::GetFileName(($nestedJars | Select-Object -First 1).FullName)
+            $flags.Add("Hollow shell - only $($outerClasses.Count) own class(es), wraps: $njName")
+        }
+
+        $outerModId = ""
+        $fmje = $zip.Entries | Where-Object { $_.FullName -eq "fabric.mod.json" } | Select-Object -First 1
+        if ($fmje) {
+            try {
+                $s = $fmje.Open()
+                $r = New-Object System.IO.StreamReader($s)
+                $t = $r.ReadToEnd(); $r.Close(); $s.Close()
+                if ($t -match '"id"\s*:\s*"([^"]+)"') { $outerModId = $matches[1] }
+            } catch { }
+        }
+
+        $allEntries = [System.Collections.Generic.List[object]]::new()
+        foreach ($e in $zip.Entries) { $allEntries.Add($e) }
+
+        $innerZips = [System.Collections.Generic.List[object]]::new()
+        foreach ($nj in $nestedJars) {
+            try {
+                $ns = $nj.Open()
+                $ms = New-Object System.IO.MemoryStream
+                $ns.CopyTo($ms); $ns.Close()
+                $ms.Position = 0
+                $iz = [System.IO.Compression.ZipArchive]::new($ms, [System.IO.Compression.ZipArchiveMode]::Read)
+                $innerZips.Add($iz)
+                foreach ($ie in $iz.Entries) { $allEntries.Add($ie) }
+            } catch { }
+        }
+
+        $runtimeExecFound  = $false
+        $httpDownloadFound = $false
+        $httpExfilFound    = $false
+        $obfuscatedCount   = 0
+        $numericClassCount = 0
+        $unicodeClassCount = 0
+        $totalClassCount   = 0
+
+
+        foreach ($entry in $allEntries) {
+            $name = $entry.FullName
+
+            if ($name -match "\.class$") {
+                $totalClassCount++
+                $className = [System.IO.Path]::GetFileNameWithoutExtension(($name -split "/")[-1])
+
+                # numeric-only class name: 123.class, 4567.class
+                if ($className -match "^\d+$") { $numericClassCount++ }
+
+                # unicode / non-ASCII class name
+                if ($className -match "[^\x00-\x7F]") { $unicodeClassCount++ }
+
+                # existing single-letter path obfuscation check
+                $segs = ($name -replace "\.class$","") -split "/"
+                $consecutiveSingle = 0
+                $maxConsecutive    = 0
+                foreach ($seg in $segs) {
+                    if ($seg.Length -eq 1) {
+                        $consecutiveSingle++
+                        if ($consecutiveSingle -gt $maxConsecutive) { $maxConsecutive = $consecutiveSingle }
+                    } else {
+                        $consecutiveSingle = 0
+                    }
+                }
+                if ($maxConsecutive -ge 3) { $obfuscatedCount++ }
+
+                try {
+                    $st = $entry.Open()
+                    $ms2 = New-Object System.IO.MemoryStream
+                    $st.CopyTo($ms2)
+                    $st.Close()
+                    $rawBytes = $ms2.ToArray()
+                    $ms2.Dispose()
+                    $ct = [System.Text.Encoding]::ASCII.GetString($rawBytes)
+
+                    if ($ct -match "java/lang/Runtime" -and
+                        $ct -match "getRuntime" -and
+                        $ct -match "exec") {
+                        $runtimeExecFound = $true
+                    }
+
+                    if ($ct -match "openConnection" -and
+                        $ct -match "HttpURLConnection" -and
+                        $ct -match "FileOutputStream") {
+                        $httpDownloadFound = $true
+                    }
+
+                    if ($ct -match "openConnection" -and
+                        $ct -match "setDoOutput" -and
+                        $ct -match "getOutputStream" -and
+                        $ct -match "getProperty") {
+                        $httpExfilFound = $true
+                    }
+
+                } catch { }
+            }
+        }
+
+        foreach ($iz in $innerZips) { try { $iz.Dispose() } catch { } }
+        $zip.Dispose()
+
+        $obfPct     = if ($totalClassCount -ge 10) { [math]::Round(($obfuscatedCount   / $totalClassCount) * 100) } else { 0 }
+        $numPct     = if ($totalClassCount -ge 5)  { [math]::Round(($numericClassCount / $totalClassCount) * 100) } else { 0 }
+        $uniPct     = if ($totalClassCount -ge 5)  { [math]::Round(($unicodeClassCount / $totalClassCount) * 100) } else { 0 }
+
+        if ($runtimeExecFound -and $obfPct -ge 25) {
+            $flags.Add("Runtime.exec() in obfuscated code - can run arbitrary OS commands")
+        }
+
+        if ($httpDownloadFound) {
+            $flags.Add("HTTP file download - fetches and writes files from a remote server at runtime")
+        }
+
+        if ($httpExfilFound) {
+            $flags.Add("HTTP POST exfiltration - sends system data to an external server")
+        }
+
+        if ($totalClassCount -ge 10 -and $obfPct -ge 25) {
+            $flags.Add("Heavy obfuscation - $obfPct% of classes use single-letter path segments (a/b/c style)")
+        }
+
+        if ($numPct -ge 20) {
+            $flags.Add("Numeric class names - $numPct% of classes have numeric-only names (e.g. 1234.class)")
+        }
+
+        if ($uniPct -ge 10) {
+            $flags.Add("Unicode class names - $uniPct% of classes use non-ASCII characters")
+        }
+
+
+        $knownLegitModIds = @(
+            "vmp-fabric","vmp","lithium","sodium","iris","fabric-api",
+            "modmenu","ferrite-core","lazydfu","starlight","entityculling",
+            "memoryleakfix","krypton","c2me-fabric","smoothboot-fabric",
+            "immediatelyfast","noisium","threadtweak"
+        )
+        $dangerCount = ($flags | Where-Object {
+            $_ -match "Runtime\.exec|HTTP file download|HTTP POST|Heavy obfuscation|Suspicious nested JAR"
+        }).Count
+        if ($outerModId -and ($knownLegitModIds -contains $outerModId) -and $dangerCount -gt 0) {
+            $flags.Add("Fake mod identity - claims to be '$outerModId' but contains dangerous code")
+        }
+
+    } catch { }
+
+    return $flags
 }
 
 # Collections for results
 $verifiedMods = @(); $unknownMods = @(); $suspiciousMods = @(); $sizeMismatchMods = @(); $tamperedMods = @(); $allModsInfo = @()
 $attributeManipulatedMods = @()
+$bypassMods = @()  # For bypass/injection detection
 
 # Process all mods - combine main mods folder with external JARs
 $jarFiles = Get-ChildItem -Path $mods -Filter *.jar -Force
@@ -914,6 +1256,33 @@ if ($unknownMods.Count -gt 0) {
                         [void]$detected.Add($m.Value)
                     }
                     
+                    if ($entry.Name -like "*.jar") {
+                        # ===== Nested JAR scanning =====
+                        try {
+                            $ms = New-Object System.IO.MemoryStream
+                            $entry.Open().CopyTo($ms)
+                            $ms.Position = 0
+                            
+                            $nestedZip = New-Object System.IO.Compression.ZipArchive($ms, [System.IO.Compression.ZipArchiveMode]::Read)
+                            
+                            foreach ($nestedEntry in $nestedZip.Entries) {
+                                if ($nestedEntry.Name -match '\.(class|json)$') {
+                                    $reader = New-Object System.IO.StreamReader($nestedEntry.Open())
+                                    $nestedContent = $reader.ReadToEnd().ToLower()
+                                    $reader.Close()
+                                    
+                                    foreach ($string in $suspiciousPatterns) {
+                                        if ($nestedContent -match [regex]::Escape($string.ToLower())) {
+                                            [void]$detected.Add($string)
+                                        }
+                                    }
+                                }
+                            }
+                        } catch {}
+                        
+                        continue
+                    }
+                    
                     if ($entry.FullName -match '\.(class|json)$' -or $entry.FullName -match 'MANIFEST\.MF') {
                         try {
                             $stream = $entry.Open()
@@ -951,6 +1320,101 @@ if ($unknownMods.Count -gt 0) {
     }
     
     Write-Host "`r$(' ' * 120)`r" -NoNewline
+}
+
+# ===== BYPASS/INJECTION SCAN - Silent with progress only =====
+$idx = 0
+
+foreach ($file in $jarFiles) {
+    $idx++
+    $spinner = @("⣾","⣽","⣻","⢿","⡿","⣟","⣯","⣷")[$idx % 8]
+    Write-Host "`r[$spinner] Bypass scan: $idx/$totalMods - $($file.Name)" -ForegroundColor Yellow -NoNewline
+    
+    $bypassFlags = Invoke-BypassScan -FilePath $file.FullName
+    
+    if ($bypassFlags.Count -gt 0) {
+        $bypassMods += [PSCustomObject]@{
+            FileName = $file.Name
+            FilePath = $file.FullName
+            Flags    = $bypassFlags
+        }
+        
+        # Remove from verified/unknown if bypass detected
+        $verifiedMods = $verifiedMods | Where-Object { $_.FileName -ne $file.Name }
+        $unknownMods = $unknownMods | Where-Object { $_.FileName -ne $file.Name }
+    }
+}
+
+Write-Host "`r$(' ' * 120)`r" -NoNewline
+
+
+# ==================== DISALLOWED MODS DETECTOR ====================
+# List of disallowed mods with their Modrinth slugs
+$disallowedMods = @{
+    "xeros-minimap" = @{
+        Names = @("Xero's Minimap", "Xeros Minimap", "xeros-minimap", "XerosMinimap", "Xero's Minimap Mod")
+    }
+    "freecam" = @{
+        Names = @("Freecam", "freecam", "FreeCam", "Free Cam")
+    }
+    "health-indicators" = @{
+        Names = @("Health Indicators", "health indicators", "HealthIndicators", "Health Indicators Mod")
+    }
+    "clickcrystals" = @{
+        Names = @("ClickCrystals", "clickcrystals", "ClickCrystals Mod")
+    }
+    "mousetweaks" = @{
+        Names = @("Mouse Tweaks", "mousetweaks", "MouseTweaks")
+    }
+    "itemscroller" = @{
+        Names = @("Item Scroller", "itemscroller", "ItemScroller")
+    }
+    "tweakeroo" = @{
+        Names = @("Tweakeroo", "tweakeroo", "Tweakeroo")
+    }
+}
+
+# Scan for disallowed mods
+$disallowedModsFound = @()
+$jarFilesForDisallowed = Get-ChildItem -Path $mods -Filter *.jar
+
+foreach ($file in $jarFilesForDisallowed) {
+    $fileName = $file.Name.ToLower()
+    $modInfo = Get-Mod-Info-From-Jar -jarPath $file.FullName
+    
+    # Check each disallowed mod
+    foreach ($modSlug in $disallowedMods.Keys) {
+        $modData = $disallowedMods[$modSlug]
+        $isDisallowed = $false
+        
+        # Check filename
+        foreach ($name in $modData.Names) {
+            if ($fileName -match [regex]::Escape($name.ToLower()) -or 
+                $fileName -match [regex]::Escape($modSlug.ToLower()) -or
+                $fileName -match [regex]::Escape(($name -replace ' ', '').ToLower())) {
+                $isDisallowed = $true
+                break
+            }
+        }
+        
+        # Check mod info from jar
+        if (-not $isDisallowed) {
+            if ($modInfo.ModId -and $modInfo.ModId.ToLower() -match $modSlug.ToLower()) {
+                $isDisallowed = $true
+            }
+            elseif ($modInfo.Name -and $modInfo.Name.ToLower() -match $modSlug.ToLower()) {
+                $isDisallowed = $true
+            }
+        }
+        
+        if ($isDisallowed) {
+            $disallowedModsFound += [PSCustomObject]@{
+                FileName = $file.Name
+                ModName = $modData.Names[0]
+            }
+            break
+        }
+    }
 }
 
 # Also scan verified mods for suspicious patterns (including those with attribute manipulation)
@@ -1169,6 +1633,14 @@ $htmlReport += "<div class='summary-cards'>
     <div class='card' style='border-bottom: 4px solid #e67e22;'>
         <h3>Hidden Files</h3>
         <p style='color: #e67e22;'>$($attributeManipulatedMods.Count)</p>
+    </div>
+    <div class='card' style='border-bottom: 4px solid var(--danger);'>
+        <h3>Disallowed</h3>
+        <p style='color: var(--danger);'>$($disallowedModsFound.Count)</p>
+    </div>
+    <div class='card' style='border-bottom: 4px solid #9b59b6;'>
+        <h3>Bypass/Injection</h3>
+        <p style='color: #9b59b6;'>$($bypassMods.Count)</p>
     </div>
 </div>"
 
@@ -1571,6 +2043,64 @@ if ($suspiciousMods.Count -gt 0) {
     $htmlReport += "</tbody></table></div>"
 }
 
+# Bypass/Injection Section
+if ($bypassMods.Count -gt 0) {
+    $htmlReport += "<div class='section'>
+        <h2 style='color: #9b59b6;'>[BYPASS/INJECTION] Advanced Threat Detection ($($bypassMods.Count))</h2>
+        <p style='color: #9b59b6; font-weight: bold;'>WARNING: These mods use advanced bypass techniques or code injection!</p>
+        <table>
+            <thead>
+                <tr>
+                    <th>File</th>
+                    <th>Threat Flags</th>
+                </tr>
+            </thead>
+            <tbody>"
+    
+    foreach ($mod in $bypassMods) {
+        foreach ($flag in $mod.Flags) {
+            $flagTitle = if ($flag -match "^(.+?) - (.+)$") { $matches[1] } else { $flag }
+            $flagDesc = if ($flag -match "^(.+?) - (.+)$") { $matches[2] } else { "" }
+            
+            $flagColor = switch -regex ($flag) {
+                "Runtime\.exec" { "#e74c3c"; break }  # Red - Critical
+                "HTTP file download" { "#e67e22"; break }  # Orange - High
+                "HTTP POST" { "#e67e22"; break }  # Orange - High
+                "Heavy obfuscation" { "#f39c12"; break }  # Yellow - Medium
+                "Suspicious nested JAR" { "#f39c12"; break }  # Yellow - Medium
+                "Numeric class" { "#f39c12"; break }  # Yellow - Medium
+                "Unicode class" { "#f39c12"; break }  # Yellow - Medium
+                "Fake mod identity" { "#e74c3c"; break }  # Red - Critical
+                default { "#9b59b6"; break }  # Purple - Default
+            }
+            
+            $htmlReport += "<tr style='border-left: 4px solid $flagColor; background: linear-gradient(135deg, #f5eef8 0%, #ebdef0 100%) !important;'>
+                <td style='font-family: monospace;'>$($mod.FileName)</td>
+                <td>
+                    <div style='margin-bottom: 8px;'>
+                        <strong style='color: $flagColor;'>● $flagTitle</strong>
+                    </div>"
+            
+            if ($flagDesc) {
+                $htmlReport += "<div style='color: #7f8c8d; font-size: 0.9rem; padding-left: 20px;'>$flagDesc</div>"
+            }
+            
+            $htmlReport += "</td></tr>"
+        }
+    }
+    
+    $htmlReport += "</tbody></table>
+    <p style='margin-top: 15px; padding: 10px; background: #f5eef8; border-left: 4px solid #9b59b6;'>
+        <strong>ANALYSIS:</strong> These detection methods identify sophisticated threats including:<br>
+        • Runtime command execution (can run arbitrary OS commands)<br>
+        • HTTP downloaders (fetches malicious payloads at runtime)<br>
+        • Data exfiltration (steals system information)<br>
+        • Heavy obfuscation (hides malicious code)<br>
+        • Fake mod identities (impersonates legitimate mods)
+    </p>
+    </div>"
+}
+
 # Tampered Mods Section
 if ($tamperedMods.Count -gt 0) {
     $htmlReport += "<div class='section'>
@@ -1601,11 +2131,38 @@ if ($tamperedMods.Count -gt 0) {
     $htmlReport += "</tbody></table></div>"
 }
 
+# Disallowed Mods Section
+if ($disallowedModsFound.Count -gt 0) {
+    $htmlReport += "<div class='section'>
+        <h2 style='color: var(--danger);'>[DISALLOWED] Server-Banned Modules ($($disallowedModsFound.Count))</h2>
+        <p style='color: var(--danger); font-weight: bold;'>WARNING: These mods are commonly disallowed on servers!</p>
+        <table>
+            <thead>
+                <tr>
+                    <th>File</th>
+                    <th>Module Name</th>
+                </tr>
+            </thead>
+            <tbody>"
+    
+    foreach ($mod in $disallowedModsFound) {
+        $htmlReport += "<tr class='suspicious-row'>
+            <td style='font-family: monospace;'>$($mod.FileName)</td>
+            <td style='color: var(--danger); font-weight: bold;'>$($mod.ModName)</td>
+        </tr>"
+    }
+    
+    $htmlReport += "</tbody></table>
+    <p style='margin-top: 15px; padding: 10px; background: #fff3cd; border-left: 4px solid #e67e22;'>
+        <strong>INFO:</strong> These modules may be allowed on some servers but are often banned. Check your server rules before using.
+    </p>
+    </div>"
+}
+
 $htmlReport += @"
 <footer class='footer'>
-    <p><strong>Valor Mod Analyzer v2.0</strong></p>
+    <p><strong>Valor Mod Analyzer v3.0 Enhanced</strong></p>
     <p>Developed by: DrValor</p>
-    <p>Inspired by: Hadron</p>
 </footer>
 </div>
 </body>
@@ -1623,5 +2180,3 @@ try {
 } catch {
     # Silently fail
 }
-
-# No console output - results are in HTML report only
